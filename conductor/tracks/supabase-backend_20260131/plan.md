@@ -110,36 +110,36 @@
 
 ### Epic 3.1: Implement Google OAuth
 
-- [ ] Task 3.1.1: Create auth service
+- [x] Task 3.1.1: Create auth service
   - Create `services/authService.ts`
   - Implement signInWithGoogle() using Supabase OAuth
   - Implement signOut()
   - Implement getSession()
 
-- [ ] Task 3.1.2: Create useAuth hook
+- [x] Task 3.1.2: Create useAuth hook
   - Create `hooks/useAuth.ts`
   - Subscribe to auth state changes
   - Expose user, session, loading, signIn, signOut
 
-- [ ] Task 3.1.3: Create auto-profile creation trigger
+- [x] Task 3.1.3: Create auto-profile creation trigger
   - Write SQL trigger/function for new user signup
   - Auto-create profile with default "New Hire" role
   - Extract name/avatar from Google metadata
 
 ### Epic 3.2: Update Login Component
 
-- [ ] Task 3.2.1: Replace Login component
+- [x] Task 3.2.1: Replace Login component
   - Remove demo login buttons
   - Add "Sign in with Google" button
   - Handle OAuth redirect flow
   - Show loading state during auth
 
-- [ ] Task 3.2.2: Update App.tsx auth flow
+- [x] Task 3.2.2: Update App.tsx auth flow
   - Use useAuth hook for session state
   - Redirect to login if not authenticated
   - Show appropriate dashboard based on profile role
 
-- [ ] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 3' (Protocol in workflow.md)
 
 ---
 
@@ -147,13 +147,13 @@
 
 ### Epic 4.1: Profile Services
 
-- [ ] Task 4.1.1: Create profile service
+- [x] Task 4.1.1: Create profile service
   - Create `services/profileService.ts`
   - Implement getProfile(userId)
   - Implement updateProfile(userId, data)
   - Implement getCurrentProfile()
 
-- [ ] Task 4.1.2: Create useProfile hook
+- [x] Task 4.1.2: Create useProfile hook
   - Create `hooks/useProfile.ts`
   - Fetch and cache current user profile
   - Provide loading/error states

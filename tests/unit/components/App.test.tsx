@@ -1,93 +1,199 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import App from '../../../App';
 
-describe('App', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
+// Mock the hooks
+vi.mock('../../../hooks/useAuth', () => ({
+  useAuth: vi.fn(),
+}));
 
-  afterEach(() => {
-    vi.useRealTimers();
+vi.mock('../../../hooks/useProfile', () => ({
+  useProfile: vi.fn(),
+}));
+
+// Import mocked modules
+import { useAuth } from '../../../hooks/useAuth';
+import { useProfile } from '../../../hooks/useProfile';
+
+const mockUseAuth = vi.mocked(useAuth);
+const mockUseProfile = vi.mocked(useProfile);
+
+// Mock profile data
+const adminProfile = {
+  id: '1',
+  email: 'admin@industrious.com',
+  name: 'Admin User',
+  role: 'Admin' as const,
+  avatar: 'https://example.com/avatar.jpg',
+  title: 'Administrator',
+  region: 'Northeast',
+  manager_id: null,
+  department: 'Operations',
+  start_date: '2024-01-01',
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
+};
+
+const managerProfile = {
+  ...adminProfile,
+  id: '2',
+  email: 'manager@industrious.com',
+  name: 'Manager User',
+  role: 'Manager' as const,
+  title: 'Regional Manager',
+};
+
+const newHireProfile = {
+  ...adminProfile,
+  id: '3',
+  email: 'newhire@industrious.com',
+  name: 'New Hire User',
+  role: 'New Hire' as const,
+  title: 'Associate',
+};
+
+describe('App', () => {
+  const mockSignIn = vi.fn();
+  const mockSignOut = vi.fn();
+  const mockRefetch = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   describe('Task 4.1.1: Render Tests', () => {
     it('should render Login screen when no user is logged in', () => {
+      mockUseAuth.mockReturnValue({
+        user: null,
+        session: null,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
+      });
+      mockUseProfile.mockReturnValue({
+        profile: null,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
       render(<App />);
 
       // Should show Login screen elements
       expect(screen.getByText('Great days start here.')).toBeInTheDocument();
-      expect(screen.getByText('Welcome Back')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('name@industriousoffice.com')).toBeInTheDocument();
+      expect(screen.getByText('Welcome')).toBeInTheDocument();
+      expect(screen.getByText('Sign in with Google')).toBeInTheDocument();
     });
 
-    it('should show login error for invalid credentials', async () => {
-      render(<App />);
-
-      // Enter invalid credentials
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'invaliduser' } });
-
-      // Submit form
-      const submitButton = screen.getByText('Sign In');
-      fireEvent.click(submitButton);
-
-      // Advance timers to process login
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should show loading state while authenticating', () => {
+      mockUseAuth.mockReturnValue({
+        user: null,
+        session: null,
+        loading: true,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
+      });
+      mockUseProfile.mockReturnValue({
+        profile: null,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
       });
 
-      // Should show error message
-      expect(screen.getByText('Access Denied')).toBeInTheDocument();
+      render(<App />);
+
+      expect(screen.getByText('Loading...')).toBeInTheDocument();
+    });
+
+    it('should show auth error when sign-in fails', () => {
+      mockUseAuth.mockReturnValue({
+        user: null,
+        session: null,
+        loading: false,
+        error: 'Authentication failed',
+        signIn: mockSignIn,
+        signOut: mockSignOut,
+      });
+      mockUseProfile.mockReturnValue({
+        profile: null,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
+
+      expect(screen.getByText('Sign In Failed')).toBeInTheDocument();
+      expect(screen.getByText('Authentication failed')).toBeInTheDocument();
     });
   });
 
   describe('Task 4.1.2: Role-based Rendering Tests', () => {
-    it('should render AdminDashboard when admin user logs in', async () => {
-      render(<App />);
-
-      // Login as admin
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'admin' } });
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should render AdminDashboard when admin user logs in', () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '1' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
       });
+      mockUseProfile.mockReturnValue({
+        profile: adminProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
 
       // Should show AdminDashboard
       expect(screen.getByText('Operations Admin Portal')).toBeInTheDocument();
       expect(screen.getByText('Operations Dashboard')).toBeInTheDocument();
     });
 
-    it('should render ManagerDashboard when manager user logs in', async () => {
-      render(<App />);
-
-      // Login as manager
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'manager' } });
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should render ManagerDashboard when manager user logs in', () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '2' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
       });
+      mockUseProfile.mockReturnValue({
+        profile: managerProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
 
       // Should show ManagerDashboard header (appears in sidebar button and h1)
       const managerOverviewElements = screen.getAllByText('Manager Overview');
       expect(managerOverviewElements.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should render NewHireDashboard when new hire user logs in', async () => {
-      render(<App />);
-
-      // Login as new hire
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'new' } });
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should render NewHireDashboard when new hire user logs in', () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '3' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
       });
+      mockUseProfile.mockReturnValue({
+        profile: newHireProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
 
       // Should show NewHireDashboard header
       expect(screen.getByText('Onboarding Journey')).toBeInTheDocument();
@@ -95,17 +201,23 @@ describe('App', () => {
   });
 
   describe('Task 4.1.3: Navigation Tests', () => {
-    it('should render sidebar navigation for logged-in admin users', async () => {
-      render(<App />);
-
-      // Login as admin
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'admin' } });
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should render sidebar navigation for logged-in admin users', () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '1' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
       });
+      mockUseProfile.mockReturnValue({
+        profile: adminProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
 
       // Should show sidebar navigation items
       expect(screen.getByText('Admin Console')).toBeInTheDocument();
@@ -114,17 +226,23 @@ describe('App', () => {
       expect(screen.getByText('New Bees & Cohorts')).toBeInTheDocument();
     });
 
-    it('should switch to workflow view when Workflow button is clicked', async () => {
-      render(<App />);
-
-      // Login as admin
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'admin' } });
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should switch to workflow view when Workflow button is clicked', () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '1' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
       });
+      mockUseProfile.mockReturnValue({
+        profile: adminProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
 
       // Click Workflow & Tasks in sidebar
       fireEvent.click(screen.getByText('Workflow & Tasks'));
@@ -133,36 +251,55 @@ describe('App', () => {
       expect(screen.getByText('Import team members, manage active registry, and automate training.')).toBeInTheDocument();
     });
 
-    it('should return to Login screen when Sign Out is clicked', async () => {
-      render(<App />);
-
-      // Login as admin
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'admin' } });
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should call signOut when Sign Out is clicked', async () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '1' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
       });
+      mockUseProfile.mockReturnValue({
+        profile: adminProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
 
       // Click Sign Out
       fireEvent.click(screen.getByText('Sign Out'));
 
-      // Should return to Login screen
-      expect(screen.getByText('Great days start here.')).toBeInTheDocument();
-      expect(screen.getByText('Welcome Back')).toBeInTheDocument();
+      // Should call signOut function
+      await waitFor(() => {
+        expect(mockSignOut).toHaveBeenCalled();
+      });
     });
 
-    it('should show demo login buttons that fill credentials', () => {
+    it('should call signIn when Google sign-in button is clicked', () => {
+      mockUseAuth.mockReturnValue({
+        user: null,
+        session: null,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
+      });
+      mockUseProfile.mockReturnValue({
+        profile: null,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
       render(<App />);
 
-      // Click admin demo button
-      const adminButton = screen.getByRole('button', { name: 'admin' });
-      fireEvent.click(adminButton);
+      // Click Sign in with Google button
+      fireEvent.click(screen.getByText('Sign in with Google'));
 
-      // Input should be filled with 'admin'
-      const input = screen.getByPlaceholderText('name@industriousoffice.com') as HTMLInputElement;
-      expect(input.value).toBe('admin');
+      expect(mockSignIn).toHaveBeenCalled();
     });
   });
 });

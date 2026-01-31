@@ -1,97 +1,172 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import App from '../../App';
 
+// Mock the hooks
+vi.mock('../../hooks/useAuth', () => ({
+  useAuth: vi.fn(),
+}));
+
+vi.mock('../../hooks/useProfile', () => ({
+  useProfile: vi.fn(),
+}));
+
+// Import mocked modules
+import { useAuth } from '../../hooks/useAuth';
+import { useProfile } from '../../hooks/useProfile';
+
+const mockUseAuth = vi.mocked(useAuth);
+const mockUseProfile = vi.mocked(useProfile);
+
+// Mock profile data
+const adminProfile = {
+  id: '1',
+  email: 'admin@industrious.com',
+  name: 'Admin User',
+  role: 'Admin' as const,
+  avatar: 'https://example.com/avatar.jpg',
+  title: 'Administrator',
+  region: 'Northeast',
+  manager_id: null,
+  department: 'Operations',
+  start_date: '2024-01-01',
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
+};
+
+const managerProfile = {
+  ...adminProfile,
+  id: '2',
+  email: 'manager@industrious.com',
+  name: 'Manager User',
+  role: 'Manager' as const,
+  title: 'Regional Manager',
+};
+
+const newHireProfile = {
+  ...adminProfile,
+  id: '3',
+  email: 'newhire@industrious.com',
+  name: 'New Hire User',
+  role: 'New Hire' as const,
+  title: 'Associate',
+};
+
 describe('User Flow Integration Tests', () => {
+  const mockSignIn = vi.fn();
+  const mockSignOut = vi.fn();
+  const mockRefetch = vi.fn();
+
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  describe('Task 5.1.1: Role Switching Integration Tests', () => {
-    it('should complete full flow: render App → login as Admin → verify AdminDashboard', async () => {
-      render(<App />);
-
-      // Step 1: Verify Login screen is shown
-      expect(screen.getByText('Great days start here.')).toBeInTheDocument();
-      expect(screen.getByText('Welcome Back')).toBeInTheDocument();
-
-      // Step 2: Enter admin credentials
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'admin' } });
-      expect(input).toHaveValue('admin');
-
-      // Step 3: Submit login
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+  describe('Task 5.1.1: Role-based Dashboard Tests', () => {
+    it('should show Login screen when not authenticated', () => {
+      mockUseAuth.mockReturnValue({
+        user: null,
+        session: null,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
+      });
+      mockUseProfile.mockReturnValue({
+        profile: null,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
       });
 
-      // Step 4: Verify AdminDashboard is shown
+      render(<App />);
+
+      // Verify Login screen is shown
+      expect(screen.getByText('Great days start here.')).toBeInTheDocument();
+      expect(screen.getByText('Welcome')).toBeInTheDocument();
+      expect(screen.getByText('Sign in with Google')).toBeInTheDocument();
+    });
+
+    it('should show AdminDashboard for Admin user with correct elements', () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '1' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
+      });
+      mockUseProfile.mockReturnValue({
+        profile: adminProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
+
+      // Verify AdminDashboard is shown
       expect(screen.getByText('Operations Admin Portal')).toBeInTheDocument();
       expect(screen.getByText('Operations Dashboard')).toBeInTheDocument();
 
-      // Step 5: Verify sidebar navigation is present
+      // Verify sidebar navigation is present
       expect(screen.getByText('Admin Console')).toBeInTheDocument();
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
       expect(screen.getByText('Workflow & Tasks')).toBeInTheDocument();
     });
 
-    it('should complete full flow: render App → login as Manager → verify ManagerDashboard', async () => {
-      render(<App />);
-
-      // Step 1: Verify Login screen
-      expect(screen.getByText('Welcome Back')).toBeInTheDocument();
-
-      // Step 2: Enter manager credentials
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'manager' } });
-
-      // Step 3: Submit login
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should show ManagerDashboard for Manager user with welcome guide', () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '2' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
+      });
+      mockUseProfile.mockReturnValue({
+        profile: managerProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
       });
 
-      // Step 4: Verify ManagerDashboard welcome guide is shown
+      render(<App />);
+
+      // Verify ManagerDashboard welcome guide is shown
       expect(screen.getByText(/Welcome,/)).toBeInTheDocument();
       expect(screen.getByText('Track Progress')).toBeInTheDocument();
       expect(screen.getByText('Get Started!')).toBeInTheDocument();
 
-      // Step 5: Dismiss welcome and verify main dashboard
+      // Dismiss welcome and verify main dashboard
       fireEvent.click(screen.getByText('Get Started!'));
       const myTeamElements = screen.getAllByText('My Team');
       expect(myTeamElements.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should complete full flow: render App → login as New Hire → verify NewHireDashboard', async () => {
-      render(<App />);
-
-      // Step 1: Verify Login screen
-      expect(screen.getByText('Welcome Back')).toBeInTheDocument();
-
-      // Step 2: Enter new hire credentials
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'new' } });
-
-      // Step 3: Submit login
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should show NewHireDashboard for New Hire user with welcome guide', () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '3' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
+      });
+      mockUseProfile.mockReturnValue({
+        profile: newHireProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
       });
 
-      // Step 4: Verify NewHireDashboard welcome guide is shown
+      render(<App />);
+
+      // Verify NewHireDashboard welcome guide is shown
       expect(screen.getByText('Congratulations!')).toBeInTheDocument();
       expect(screen.getByText(/We are SO glad you are here!/)).toBeInTheDocument();
       expect(screen.getByText('Get Started!')).toBeInTheDocument();
 
-      // Step 5: Dismiss welcome and verify main dashboard
+      // Dismiss welcome and verify main dashboard
       fireEvent.click(screen.getByText('Get Started!'));
       const myJourneyElements = screen.getAllByText('My Journey');
       expect(myJourneyElements.length).toBeGreaterThanOrEqual(1);
@@ -99,17 +174,23 @@ describe('User Flow Integration Tests', () => {
   });
 
   describe('Task 5.1.2: View Mode Switching Integration Tests', () => {
-    it('should allow Admin to navigate between all view modes', async () => {
-      render(<App />);
-
-      // Login as admin
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'admin' } });
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should allow Admin to navigate between all view modes', () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '1' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
       });
+      mockUseProfile.mockReturnValue({
+        profile: adminProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
 
       // Verify initial dashboard view
       expect(screen.getByText('Operations Dashboard')).toBeInTheDocument();
@@ -127,17 +208,23 @@ describe('User Flow Integration Tests', () => {
       expect(screen.getByText('Operations Dashboard')).toBeInTheDocument();
     });
 
-    it('should allow Admin to preview Manager view via sidebar', async () => {
-      render(<App />);
-
-      // Login as admin
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'admin' } });
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should allow Admin to preview Manager view via sidebar', () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '1' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
       });
+      mockUseProfile.mockReturnValue({
+        profile: adminProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
 
       // Find and click Manager Overview in sidebar
       const managerOverviewElements = screen.getAllByText('Manager Overview');
@@ -148,17 +235,23 @@ describe('User Flow Integration Tests', () => {
       expect(screen.getByText('Track Progress')).toBeInTheDocument();
     });
 
-    it('should allow Admin to preview New Hire view via sidebar', async () => {
-      render(<App />);
-
-      // Login as admin
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'admin' } });
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should allow Admin to preview New Hire view via sidebar', () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '1' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
       });
+      mockUseProfile.mockReturnValue({
+        profile: adminProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
 
       // Click New Hire View in sidebar (shows as "New Hire View" for admins)
       fireEvent.click(screen.getByText('New Hire View'));
@@ -167,17 +260,23 @@ describe('User Flow Integration Tests', () => {
       expect(screen.getByText('Congratulations!')).toBeInTheDocument();
     });
 
-    it('should maintain login session across view switches', async () => {
-      render(<App />);
-
-      // Login as admin
-      const input = screen.getByPlaceholderText('name@industriousoffice.com');
-      fireEvent.change(input, { target: { value: 'admin' } });
-      fireEvent.click(screen.getByText('Sign In'));
-
-      await act(async () => {
-        vi.advanceTimersByTime(1000);
+    it('should call signOut when Sign Out is clicked and user is logged out', async () => {
+      mockUseAuth.mockReturnValue({
+        user: { id: '1' } as any,
+        session: {} as any,
+        loading: false,
+        error: null,
+        signIn: mockSignIn,
+        signOut: mockSignOut,
       });
+      mockUseProfile.mockReturnValue({
+        profile: adminProfile,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      render(<App />);
 
       // Switch between multiple views
       fireEvent.click(screen.getByText('Workflow & Tasks'));
@@ -187,9 +286,13 @@ describe('User Flow Integration Tests', () => {
       // User should still be logged in (Sign Out button visible)
       expect(screen.getByText('Sign Out')).toBeInTheDocument();
 
-      // Logout and verify return to login
+      // Logout
       fireEvent.click(screen.getByText('Sign Out'));
-      expect(screen.getByText('Welcome Back')).toBeInTheDocument();
+
+      // Verify signOut was called
+      await waitFor(() => {
+        expect(mockSignOut).toHaveBeenCalled();
+      });
     });
   });
 });
