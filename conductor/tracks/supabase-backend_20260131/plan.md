@@ -36,73 +36,73 @@
 
 ### Epic 2.1: Create Core Tables
 
-- [ ] Task 2.1.1: Create profiles table
+- [x] Task 2.1.1: Create profiles table
   - Write SQL migration for profiles table
   - Include all fields from design.md
   - Add foreign key to auth.users
 
-- [ ] Task 2.1.2: Create training_modules table
+- [x] Task 2.1.2: Create training_modules table
   - Write SQL for training module definitions
   - Include type constraint for module types
 
-- [ ] Task 2.1.3: Create user_modules junction table
+- [x] Task 2.1.3: Create user_modules junction table
   - Write SQL for user progress tracking
   - Add unique constraint on (user_id, module_id)
 
 ### Epic 2.2: Create OKR Tables
 
-- [ ] Task 2.2.1: Create okrs and key_results tables
+- [x] Task 2.2.1: Create okrs and key_results tables
   - Write SQL for OKR structure
   - Add foreign key relationships
 
-- [ ] Task 2.2.2: Create user_okrs junction table
+- [x] Task 2.2.2: Create user_okrs junction table
   - Write SQL for user-OKR assignments
 
 ### Epic 2.3: Create Manager Task Tables
 
-- [ ] Task 2.3.1: Create manager_task_templates table
+- [x] Task 2.3.1: Create manager_task_templates table
   - Write SQL for task template definitions
   - Include due_date_offset field
 
-- [ ] Task 2.3.2: Create user_manager_tasks table
+- [x] Task 2.3.2: Create user_manager_tasks table
   - Write SQL for task completion tracking
   - Add unique constraint on (manager_id, new_hire_id, template_id)
 
 ### Epic 2.4: Create Social Tables
 
-- [ ] Task 2.4.1: Create shoutouts table
+- [x] Task 2.4.1: Create shoutouts table
   - Write SQL with from_user_id and to_user_id references
 
-- [ ] Task 2.4.2: Create workbook_responses table
+- [x] Task 2.4.2: Create workbook_responses table
   - Write SQL with unique constraint on (user_id, prompt_key)
 
-- [ ] Task 2.4.3: Create module_comments table
+- [x] Task 2.4.3: Create module_comments table
   - Write SQL for module comments
 
 ### Epic 2.5: Create RLS Policies
 
-- [ ] Task 2.5.1: Create helper function get_user_role()
+- [x] Task 2.5.1: Create helper function get_user_role()
   - Write SQL function for role lookup
 
-- [ ] Task 2.5.2: Create profiles RLS policies
+- [x] Task 2.5.2: Create profiles RLS policies
   - Admin: SELECT all
   - Manager: SELECT self + team
   - User: SELECT/UPDATE own
 
-- [ ] Task 2.5.3: Create user_modules RLS policies
+- [x] Task 2.5.3: Create user_modules RLS policies
   - Admin: SELECT all
   - Manager: SELECT team progress
   - User: ALL on own records
 
-- [ ] Task 2.5.4: Create public read policies
+- [x] Task 2.5.4: Create public read policies
   - training_modules: SELECT for all authenticated
   - okrs, key_results: SELECT for all authenticated
   - manager_task_templates: SELECT for all authenticated
 
-- [ ] Task 2.5.5: Create remaining RLS policies
+- [x] Task 2.5.5: Create remaining RLS policies
   - user_okrs, user_manager_tasks, shoutouts, workbook_responses, module_comments
 
-- [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
 ---
 
