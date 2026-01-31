@@ -220,17 +220,17 @@
 
 ### Epic 5.2: Feature Integration
 
-- [ ] Task 5.2.1: Integrate OKRs
+- [x] Task 5.2.1: Integrate OKRs
   - Create useOkrs hook
   - Fetch user's assigned OKRs
   - Display on NewHireDashboard
 
-- [ ] Task 5.2.2: Integrate workbook responses
+- [x] Task 5.2.2: Integrate workbook responses
   - Create useWorkbook hook
   - Save/load responses from database
   - Support manager comments
 
-- [ ] Task 5.2.3: Integrate shoutouts
+- [x] Task 5.2.3: Integrate shoutouts
   - Create useShoutouts hook
   - Fetch shoutouts for user
   - Display on dashboard
