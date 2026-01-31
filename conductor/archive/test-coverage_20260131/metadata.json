@@ -1,0 +1,59 @@
+{
+  "track_id": "test-coverage_20260131",
+  "type": "feature",
+  "status": "completed",
+  "priority": "medium",
+  "depends_on": [],
+  "estimated_hours": null,
+  "created_at": "2026-01-31T10:15:00Z",
+  "updated_at": "2026-01-31T10:55:00Z",
+  "description": "Add comprehensive test coverage for core dashboard components",
+  "has_design": true,
+  "threads": [
+    {
+      "id": "newtrack-001",
+      "action": "newtrack",
+      "timestamp": "2026-01-31T10:30:00Z"
+    }
+  ],
+  "artifacts": {
+    "design": true,
+    "spec": true,
+    "plan": true,
+    "beads": false
+  },
+  "workflow": {
+    "state": "COMPLETED",
+    "history": [
+      {"state": "INIT", "at": "2026-01-31T10:30:00Z", "command": "newtrack"},
+      {"state": "TRACKED", "at": "2026-01-31T10:30:00Z", "command": "newtrack"},
+      {"state": "COMPLETED", "at": "2026-01-31T10:55:00Z", "command": "finish"}
+    ],
+    "branch": null,
+    "archived": true,
+    "keep": false
+  },
+  "docSync": {
+    "at": "2026-01-31T10:55:00Z",
+    "threads": [],
+    "itemsAdded": 12,
+    "archiveChoice": "archive"
+  },
+  "generation": {
+    "status": "complete",
+    "specCreatedAt": "2026-01-31T10:30:00Z",
+    "planCreatedAt": "2026-01-31T10:30:00Z",
+    "rbCompletedAt": null
+  },
+  "beads": {
+    "status": "pending",
+    "epicId": null,
+    "epics": [],
+    "issues": [],
+    "planTasks": {},
+    "beadToTask": {},
+    "crossTrackDeps": [],
+    "reviewStatus": null,
+    "reviewedAt": null
+  }
+}

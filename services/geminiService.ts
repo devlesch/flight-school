@@ -2,8 +2,20 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { NewHireProfile } from "../types";
 
-// Initialize the GoogleGenAI client with the API key from environment variables.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize the GoogleGenAI client lazily - only when actually used
+let ai: GoogleGenAI | null = null;
+
+const getAI = () => {
+  if (!ai) {
+    const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.warn('Gemini API key not set - AI features disabled');
+      return null;
+    }
+    ai = new GoogleGenAI({ apiKey });
+  }
+  return ai;
+};
 
 export const generateEmailDraft = async (
   newHireName: string,
@@ -50,8 +62,13 @@ export const generateEmailDraft = async (
       - Keep it under 100 words.
     `;
 
+    const client = getAI();
+    if (!client) {
+      return "[AI disabled] Sample email draft for " + newHireName;
+    }
+
     // Use gemini-3-flash-preview for basic text generation tasks.
-    const response = await ai.models.generateContent({
+    const response = await client.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
@@ -85,8 +102,13 @@ export const generateManagerNotification = async (
       Tone: Collaborative, professional, concise.
     `;
 
+    const client = getAI();
+    if (!client) {
+      return "[AI disabled] Sample notification for " + managerName;
+    }
+
     // Use gemini-3-flash-preview for text generation tasks.
-    const response = await ai.models.generateContent({
+    const response = await client.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
@@ -116,8 +138,13 @@ export const analyzeProgress = async (hires: NewHireProfile[]): Promise<string> 
       Format: Markdown. Concise (max 3 bullet points).
     `;
 
+    const client = getAI();
+    if (!client) {
+      return "[AI disabled] Progress analysis unavailable";
+    }
+
     // Use gemini-3-flash-preview for analysis of summary data.
-    const response = await ai.models.generateContent({
+    const response = await client.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
@@ -141,13 +168,18 @@ export interface ExtractedHireData {
 
 export const extractNewHireData = async (rawText: string): Promise<ExtractedHireData[]> => {
   try {
+    const client = getAI();
+    if (!client) {
+      return [];
+    }
+
     const prompt = `
       Extract a list of new hires from the provided raw text (which comes from a PDF or Excel report).
       Only extract the first 5 entries found.
     `;
 
     // Define the response schema for structured extraction and use gemini-3-flash-preview.
-    const response = await ai.models.generateContent({
+    const response = await client.models.generateContent({
       model: 'gemini-3-flash-preview',
       // Fix: Follow @google/genai guidelines for multi-part content
       contents: { 
