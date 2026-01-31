@@ -243,20 +243,20 @@
 
 ### Epic 6.1: Create Seed Script
 
-- [ ] Task 6.1.1: Create seed SQL file
+- [x] Task 6.1.1: Create seed SQL file
   - Create `supabase/seed.sql`
   - Convert MANAGERS from constants.ts to INSERT statements
   - Convert training modules to INSERT statements
   - Convert OKRs and key results
 
-- [ ] Task 6.1.2: Create manager task templates seed
+- [x] Task 6.1.2: Create manager task templates seed
   - Convert MANAGER_ONBOARDING_TASKS to INSERT statements
 
-- [ ] Task 6.1.3: Document seed execution
+- [x] Task 6.1.3: Document seed execution
   - Add instructions for running seed in Supabase SQL editor
   - Note: Profiles created via auth signup, not seed
 
-- [ ] Task: Conductor - User Manual Verification 'Phase 6' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 6' (Protocol in workflow.md)
 
 ---
 
