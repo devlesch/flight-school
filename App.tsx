@@ -8,6 +8,8 @@ import type { AdminViewMode } from './components/AdminDashboard';
 import ManagerDashboard from './components/ManagerDashboard';
 import NewHireDashboard from './components/NewHireDashboard';
 import Login from './components/Login';
+import ErrorBoundary from './components/ErrorBoundary';
+import ConnectionStatus from './components/ConnectionStatus';
 import { LayoutDashboard, Users, BookOpen, LogOut, Menu, ClipboardList, Calendar, MessageSquare, PieChart, Settings, ChevronRight, Loader2 } from 'lucide-react';
 
 // Using a data URI for a reliable, offline-capable logo placeholder that resembles the brand
@@ -140,8 +142,10 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex bg-[#013E3F]">
-      {/* Sidebar Navigation */}
+    <ErrorBoundary>
+      <ConnectionStatus />
+      <div className="min-h-screen flex bg-[#013E3F]">
+        {/* Sidebar Navigation */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#012d2e] border-r border-[#F3EEE7]/5 text-white transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-full flex flex-col">
           <div className="p-8 border-b border-[#F3EEE7]/5 flex items-center gap-3">
@@ -274,8 +278,9 @@ const App: React.FC = () => {
         </main>
       </div>
 
-      {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />}
-    </div>
+        {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />}
+      </div>
+    </ErrorBoundary>
   );
 };
 

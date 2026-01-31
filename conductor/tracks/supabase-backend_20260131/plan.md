@@ -264,22 +264,24 @@
 
 ### Epic 7.1: Remove Mock Data Dependencies
 
-- [ ] Task 7.1.1: Audit constants.ts usage
+- [x] Task 7.1.1: Audit constants.ts usage
   - Find all imports of mock data
   - Verify each is replaced with Supabase data
+  - Note: Mock data kept as fallback during transition
 
 - [ ] Task 7.1.2: Clean up constants.ts
   - Keep UNIVERSAL_SERVICE_STEPS (UI content, not data)
   - Remove MANAGERS, NEW_HIRES, MOCK_TRAINING_MODULES
   - Keep INDUSTRIOUS_LOGO_SVG and other UI constants
+  - Deferred: Mock data serves as fallback when Supabase unavailable
 
 ### Epic 7.2: Error Handling
 
-- [ ] Task 7.2.1: Add global error boundary
+- [x] Task 7.2.1: Add global error boundary
   - Create ErrorBoundary component
   - Catch and display Supabase errors gracefully
 
-- [ ] Task 7.2.2: Add connection status indicator
+- [x] Task 7.2.2: Add connection status indicator
   - Show banner when Supabase is unreachable
   - Retry logic for failed requests
 
