@@ -32,6 +32,31 @@ Industrious Flight School is a modern single-page application (SPA) built with R
 | **Recharts** | ^2.12.0 | Charting and data visualization |
 | **Canvas Confetti** | 1.9.2 | Celebration animations |
 
+## Backend & Authentication
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Supabase** | ^2.x | Backend-as-a-Service (PostgreSQL + Auth) |
+| **@supabase/supabase-js** | ^2.x | Supabase JavaScript client |
+
+### Database Tables
+- `profiles` - User profiles (extends auth.users)
+- `training_modules` - Training content definitions
+- `user_modules` - User progress per module
+- `okrs` - Objectives with key results
+- `key_results` - Key results linked to OKRs
+- `user_okrs` - User-OKR assignments
+- `manager_task_templates` - Onboarding task templates
+- `user_manager_tasks` - Task completion tracking
+- `shoutouts` - User-to-user recognition
+- `workbook_responses` - Workbook answers
+- `module_comments` - Comments on modules
+
+### Authentication
+- Google OAuth via Supabase Auth
+- Auto-profile creation on first login
+- Domain restriction: `@industriousoffice.com` only
+
 ## AI Integration
 
 | Technology | Version | Purpose |
@@ -46,15 +71,41 @@ Industrious Flight School is a modern single-page application (SPA) built with R
 ├── App.tsx                 # Main application component with routing
 ├── index.tsx              # Entry point
 ├── index.html             # HTML template
-├── types.ts               # TypeScript type definitions
-├── constants.ts           # Mock data and constants
+├── types.ts               # TypeScript type definitions (legacy)
+├── constants.ts           # Mock data fallback
 ├── components/
 │   ├── AdminDashboard.tsx    # Admin role dashboard
 │   ├── ManagerDashboard.tsx  # Manager role dashboard
 │   ├── NewHireDashboard.tsx  # New hire role dashboard
-│   └── Login.tsx             # Authentication component
+│   ├── Login.tsx             # Google OAuth authentication
+│   ├── ErrorBoundary.tsx     # Global error handling
+│   └── ConnectionStatus.tsx  # Offline indicator
+├── hooks/
+│   ├── useAuth.ts            # Authentication state
+│   ├── useProfile.ts         # User profile fetching
+│   ├── useModules.ts         # Training module progress
+│   ├── useTeam.ts            # Manager team data
+│   ├── useManagerTasks.ts    # Onboarding tasks
+│   ├── useOkrs.ts            # OKR fetching
+│   ├── useWorkbook.ts        # Workbook responses
+│   └── useShoutouts.ts       # Shoutouts
 ├── services/
-│   └── geminiService.ts      # Gemini AI integration
+│   ├── geminiService.ts      # Gemini AI integration
+│   ├── authService.ts        # Supabase auth
+│   ├── profileService.ts     # Profile CRUD
+│   ├── moduleService.ts      # Training modules
+│   ├── teamService.ts        # Team data
+│   ├── managerTaskService.ts # Manager tasks
+│   ├── okrService.ts         # OKRs
+│   ├── workbookService.ts    # Workbook
+│   └── shoutoutService.ts    # Shoutouts
+├── lib/
+│   └── supabase.ts           # Supabase client
+├── types/
+│   └── database.ts           # Database TypeScript types
+├── supabase/
+│   ├── migrations/           # SQL schema migrations
+│   └── seed.sql              # Initial data seed
 ├── package.json
 ├── tsconfig.json
 └── vite.config.ts
@@ -90,4 +141,6 @@ Industrious Flight School is a modern single-page application (SPA) built with R
 
 ### Environment
 - Requires `GEMINI_API_KEY` in `.env.local` for AI features
+- Requires `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for database
 - Node.js required for development
+- Supabase project with Google OAuth configured

@@ -39,3 +39,34 @@ Contains reusable learnings from completed tracks.
 - **Test structure**: Organize tests by feature area using nested `describe()` blocks matching plan task numbers
 - **Welcome guide dismissal**: Many dashboard components show welcome guides first - click "Get Started!" button before testing main content
 - **Conditional button text**: Some buttons have conditional text based on user role - check actual text for the test user role
+
+### Supabase Integration
+
+- **Service + Hook pattern**: Each database entity gets `services/[entity]Service.ts` (CRUD) + `hooks/use[Entity].ts` (React state)
+- **Type casting**: Supabase client requires `as any` casts for insert/update with strict TypeScript
+- **Graceful degradation**: Keep mock data as fallback: `supabaseData.length > 0 ? transform(supabaseData) : mockData`
+- **RLS helper function**: Create `get_user_role()` SQL function for role-based policies
+- **Auto-profile on signup**: Use Postgres trigger on `auth.users` to create profile from OAuth metadata
+
+### Authentication
+
+- **Google OAuth**: Use `supabase.auth.signInWithOAuth({ provider: 'google' })`
+- **Domain restriction**: SQL trigger on `auth.users` can enforce email domain
+- **Session management**: `useAuth` hook subscribes to `onAuthStateChange` for reactive session state
+
+## Commands
+
+### Supabase
+
+- Run migrations in Supabase SQL Editor (Dashboard → SQL → paste file content)
+- Seed data: Run `supabase/seed.sql` after migrations
+- Configure OAuth: Dashboard → Authentication → Providers → Google
+
+## Gotchas
+
+### Supabase
+
+- **TypeScript types**: Database types in `types/database.ts` must be manually kept in sync with schema
+- **RLS policy order**: More restrictive policies should come first; Supabase evaluates OR between policies
+- **Trigger SECURITY DEFINER**: Auto-profile trigger needs `SECURITY DEFINER` to insert into profiles table
+- **OAuth redirect**: Configure correct redirect URLs in both Supabase and Google Cloud Console
