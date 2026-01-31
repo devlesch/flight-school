@@ -160,42 +160,42 @@
 
 ### Epic 4.2: Module Services
 
-- [ ] Task 4.2.1: Create module service
+- [x] Task 4.2.1: Create module service
   - Create `services/moduleService.ts`
   - Implement getModules() - all module definitions
   - Implement getUserModules(userId) - user progress
   - Implement updateModuleProgress(userId, moduleId, data)
 
-- [ ] Task 4.2.2: Create useModules hook
+- [x] Task 4.2.2: Create useModules hook
   - Create `hooks/useModules.ts`
   - Combine module definitions with user progress
   - Provide markComplete, updateScore functions
 
 ### Epic 4.3: Team Services (Manager)
 
-- [ ] Task 4.3.1: Create team service
+- [x] Task 4.3.1: Create team service
   - Create `services/teamService.ts`
   - Implement getTeamMembers(managerId)
   - Implement getTeamProgress(managerId)
 
-- [ ] Task 4.3.2: Create useTeam hook
+- [x] Task 4.3.2: Create useTeam hook
   - Create `hooks/useTeam.ts`
   - Fetch manager's direct reports
   - Include progress data for each team member
 
 ### Epic 4.4: Manager Task Services
 
-- [ ] Task 4.4.1: Create manager task service
+- [x] Task 4.4.1: Create manager task service
   - Create `services/managerTaskService.ts`
   - Implement getTaskTemplates()
   - Implement getUserTasks(managerId, newHireId)
   - Implement updateTaskCompletion(taskId, completed)
 
-- [ ] Task 4.4.2: Create useManagerTasks hook
+- [x] Task 4.4.2: Create useManagerTasks hook
   - Create `hooks/useManagerTasks.ts`
   - Fetch and manage task completion state
 
-- [ ] Task: Conductor - User Manual Verification 'Phase 4' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 4' (Protocol in workflow.md)
 
 ---
 
