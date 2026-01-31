@@ -1,28 +1,86 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { User, NewHireProfile, TrainingModule } from '../types';
 import { NEW_HIRES, MANAGERS, UNIVERSAL_SERVICE_STEPS } from '../constants';
-import { CheckCircle, Circle, Video, FileText, ArrowRight, Slack, Megaphone, Target, ClipboardList, Users, UserCheck, BookOpen, X, Save, AtSign, Lightbulb, PenTool, MessageSquare, Quote, ChevronRight, Calendar as CalendarIcon, ChevronLeft, AlertTriangle, ArrowUpRight, PlayCircle, MapPin, LayoutDashboard, HeartHandshake, Eye, Star, Compass, ListOrdered, Info, Briefcase, MessageCircle, Globe, GraduationCap, LifeBuoy, User as UserIcon, Link as LinkIcon, ThumbsUp, Send, Timer } from 'lucide-react';
+import { CheckCircle, Circle, Video, FileText, ArrowRight, Slack, Megaphone, Target, ClipboardList, Users, UserCheck, BookOpen, X, Save, AtSign, Lightbulb, PenTool, MessageSquare, Quote, ChevronRight, Calendar as CalendarIcon, ChevronLeft, AlertTriangle, ArrowUpRight, PlayCircle, MapPin, LayoutDashboard, HeartHandshake, Eye, Star, Compass, ListOrdered, Info, Briefcase, MessageCircle, Globe, GraduationCap, LifeBuoy, User as UserIcon, Link as LinkIcon, ThumbsUp, Send, Timer, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { useModules } from '../hooks/useModules';
+import { useWorkbook } from '../hooks/useWorkbook';
+import { useShoutouts } from '../hooks/useShoutouts';
+import { useProfile } from '../hooks/useProfile';
 
 interface NewHireDashboardProps {
   user: User;
 }
 
 const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
-  // Determine if the current user is in the mock list, otherwise default to first new hire
-  const myProfile = NEW_HIRES.find(h => h.id === user.id) || NEW_HIRES.find(h => h.role === 'New Hire') || NEW_HIRES[0];
+  // Supabase hooks for data fetching
+  const { profile: supabaseProfile, loading: profileLoading } = useProfile(user.id);
+  const { modules: supabaseModules, loading: modulesLoading, markComplete, toggleLike } = useModules(user.id);
+  const { responsesMap: workbookResponses, commentsMap: workbookComments, loading: workbookLoading, saveResponse } = useWorkbook(user.id);
+  const { shoutouts: supabaseShoutouts } = useShoutouts(user.id);
+
+  // Fallback to mock data during transition (when Supabase data isn't available yet)
+  const mockProfile = NEW_HIRES.find(h => h.id === user.id) || NEW_HIRES.find(h => h.role === 'New Hire') || NEW_HIRES[0];
+
+  // Use Supabase profile if available, otherwise mock data
+  const myProfile = useMemo(() => {
+    if (supabaseProfile) {
+      // Create a compatible profile shape from Supabase data
+      return {
+        ...mockProfile,
+        id: supabaseProfile.id,
+        name: supabaseProfile.name,
+        email: supabaseProfile.email,
+        avatar: supabaseProfile.avatar || mockProfile.avatar,
+        title: supabaseProfile.title || mockProfile.title,
+        managerId: supabaseProfile.manager_id || mockProfile.managerId,
+        startDate: supabaseProfile.start_date || mockProfile.startDate,
+        department: supabaseProfile.department || mockProfile.department,
+        workbookResponses: workbookResponses,
+        workbookComments: workbookComments,
+      };
+    }
+    return mockProfile;
+  }, [supabaseProfile, mockProfile, workbookResponses, workbookComments]);
+
+  // Transform Supabase modules to match the expected TrainingModule interface
+  const myModules: TrainingModule[] = useMemo(() => {
+    if (supabaseModules.length > 0) {
+      return supabaseModules.map(m => ({
+        id: m.id,
+        title: m.title,
+        description: m.description || '',
+        type: m.type as TrainingModule['type'],
+        duration: m.duration || '',
+        completed: m.progress?.completed || false,
+        dueDate: m.progress?.due_date || new Date().toISOString().split('T')[0],
+        link: m.link || undefined,
+        score: m.progress?.score || undefined,
+        host: m.host || undefined,
+        liked: m.progress?.liked || false,
+        likes: m.progress?.liked ? 1 : 0,
+      }));
+    }
+    return mockProfile.modules;
+  }, [supabaseModules, mockProfile.modules]);
+
   const myManager = MANAGERS.find(m => m.id === myProfile.managerId) || MANAGERS[0];
-  
+
   // Navigation State
   const [showWelcomeGuide, setShowWelcomeGuide] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'calendar' | 'workbook'>('dashboard');
-  
+
   // We use a counter to force re-renders when deep objects (like comments/likes) change in the mock data
   const [updateCounter, setUpdateCounter] = useState(0);
 
-  const [completedModules, setCompletedModules] = useState<Set<string>>(
-    new Set(myProfile.modules.filter(m => m.completed).map(m => m.id))
-  );
+  // Compute completed modules from actual module data
+  const [completedModules, setCompletedModules] = useState<Set<string>>(new Set());
+
+  // Sync completed modules when module data changes
+  useEffect(() => {
+    const completed = new Set(myModules.filter(m => m.completed).map(m => m.id));
+    setCompletedModules(completed);
+  }, [myModules]);
 
   // Modal State
   const [showOverdueModal, setShowOverdueModal] = useState(false);
@@ -40,7 +98,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
 
   // Initialize prompt answers
-  React.useEffect(() => {
+  useEffect(() => {
     if (myProfile.customPrompts) {
        const initialAnswers: Record<string, string> = {};
        myProfile.customPrompts.forEach(p => {
@@ -49,6 +107,13 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
        setPromptAnswers(initialAnswers);
     }
   }, [myProfile]);
+
+  // Sync workbook inputs when Supabase data loads
+  useEffect(() => {
+    if (workbookResponses && Object.keys(workbookResponses).length > 0) {
+      setWorkbookInputs(prev => ({ ...prev, ...workbookResponses }));
+    }
+  }, [workbookResponses]);
   
   // Filter State
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
@@ -69,10 +134,10 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
     { ...agm, roleLabel: 'Assistant General Manager' }
   ];
 
-  const toggleModule = (id: string) => {
+  const toggleModule = async (id: string) => {
     const newSet = new Set(completedModules);
     const wasCompleted = newSet.has(id);
-    
+
     if (wasCompleted) {
       newSet.delete(id);
     } else {
@@ -86,8 +151,13 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
       });
     }
 
-    // Persist to the shared mock data so Admin/Manager views see the update immediately
-    const module = myProfile.modules.find(m => m.id === id);
+    // Persist to Supabase if connected
+    if (supabaseModules.length > 0 && !wasCompleted) {
+      await markComplete(id);
+    }
+
+    // Also persist to mock data for backward compatibility
+    const module = mockProfile.modules.find(m => m.id === id);
     if (module) {
       module.completed = !wasCompleted;
     }
@@ -96,7 +166,15 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
   };
 
   // Engagement Handlers
-  const handleLike = (module: TrainingModule) => {
+  const handleLike = async (module: TrainingModule) => {
+    const newLikedState = !module.liked;
+
+    // Persist to Supabase if connected
+    if (supabaseModules.length > 0) {
+      await toggleLike(module.id, newLikedState);
+    }
+
+    // Update local state for mock data compatibility
     if (module.liked) {
       module.likes = (module.likes || 1) - 1;
       module.liked = false;
@@ -163,12 +241,21 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
     setShowOverdueModal(false);
   };
 
-  const handleWorkbookSave = () => {
-    myProfile.workbookResponses = workbookInputs;
-    
+  const handleWorkbookSave = async () => {
+    // Save all workbook inputs to Supabase
+    if (supabaseProfile) {
+      const savePromises = Object.entries(workbookInputs).map(([key, value]) =>
+        saveResponse(key, value)
+      );
+      await Promise.all(savePromises);
+    }
+
+    // Also update mock data for backward compatibility
+    mockProfile.workbookResponses = workbookInputs;
+
     // Save prompts
-    if (myProfile.customPrompts) {
-      myProfile.customPrompts.forEach(p => {
+    if (mockProfile.customPrompts) {
+      mockProfile.customPrompts.forEach(p => {
         if (promptAnswers[p.id]) {
           p.answer = promptAnswers[p.id];
         }
@@ -180,7 +267,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
       particleCount: 150,
       spread: 100,
       origin: { y: 0.6 },
-      colors: ['#FDD344', '#013E3F'] 
+      colors: ['#FDD344', '#013E3F']
     });
     alert("Workbook progress saved!");
   };
@@ -211,7 +298,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
     window.scrollTo(0, 0);
   };
 
-  const progress = Math.round((completedModules.size / myProfile.modules.length) * 100);
+  const progress = Math.round((completedModules.size / myModules.length) * 100);
 
   const getModuleIcon = (type: string) => {
     switch (type) {
@@ -277,7 +364,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
     return true;
   };
 
-  const visibleModules = myProfile.modules.filter(module => {
+  const visibleModules = myModules.filter(module => {
     if (showIncompleteOnly && completedModules.has(module.id)) return false;
     return shouldShowModule(module);
   });
@@ -337,7 +424,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
     // Actual days
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${currentMonthDate.getFullYear()}-${String(currentMonthDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const dayModules = myProfile.modules.filter(m => m.dueDate === dateStr);
+      const dayModules = myModules.filter(m => m.dueDate === dateStr);
       
       days.push(
         <div key={day} className="h-32 bg-white border-r border-b border-[#013E3F]/10 p-2 relative group hover:bg-[#F3EEE7]/10 transition-colors">
@@ -366,9 +453,9 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
   };
 
   // --- BANNER LOGIC ---
-  const overdueTasks = myProfile.modules.filter(m => !completedModules.has(m.id) && new Date(m.dueDate) < new Date());
+  const overdueTasks = myModules.filter(m => !completedModules.has(m.id) && new Date(m.dueDate) < new Date());
   // Sort incomplete tasks by due date to find next up
-  const incompleteTasks = myProfile.modules
+  const incompleteTasks = myModules
     .filter(m => !completedModules.has(m.id))
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   
@@ -944,7 +1031,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
                 <div className="grid grid-cols-7 bg-[#F3EEE7] gap-[1px] border-l border-[#013E3F]/10">
                    {weekDays.map(day => {
                      const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-                     const dayModules = myProfile.modules.filter(m => m.dueDate === dateStr);
+                     const dayModules = myModules.filter(m => m.dueDate === dateStr);
                      const isToday = new Date().toDateString() === day.toDateString(); // Won't match mock dates easily but logic is here
 
                      return (

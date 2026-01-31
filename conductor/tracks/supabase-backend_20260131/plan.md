@@ -203,17 +203,17 @@
 
 ### Epic 5.1: Dashboard Integration
 
-- [ ] Task 5.1.1: Update AdminDashboard
+- [x] Task 5.1.1: Update AdminDashboard
   - Replace mock data with useProfile, useTeam hooks
   - Fetch all users for admin view
   - Handle loading/error states
 
-- [ ] Task 5.1.2: Update ManagerDashboard
+- [x] Task 5.1.2: Update ManagerDashboard
   - Use useTeam hook for direct reports
   - Use useManagerTasks for onboarding tracker
   - Replace hardcoded NEW_HIRES with real data
 
-- [ ] Task 5.1.3: Update NewHireDashboard
+- [x] Task 5.1.3: Update NewHireDashboard
   - Use useModules for training progress
   - Use useProfile for user data
   - Persist module completion to database
@@ -235,7 +235,7 @@
   - Fetch shoutouts for user
   - Display on dashboard
 
-- [ ] Task: Conductor - User Manual Verification 'Phase 5' (Protocol in workflow.md)
+- [~] Task: Conductor - User Manual Verification 'Phase 5' (Protocol in workflow.md)
 
 ---
 

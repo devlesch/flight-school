@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { User, NewHireProfile, WorkbookPrompt, ManagerTask, TrainingModule } from '../types';
 import { NEW_HIRES, MANAGERS } from '../constants';
-import { Slack, Mail, CheckSquare, Clock, AlertTriangle, MessageSquarePlus, ChevronRight, X, AlertCircle, CheckCircle, BookOpen, MessageCircle, Megaphone, ListTodo, Calendar, Timer, Info, Target, ArrowRight, LayoutDashboard, Eye, PlusCircle, Send, Users, UserCheck, ChevronLeft, ClipboardList, Briefcase, UserPlus, Search, Filter, UserCog, RefreshCw } from 'lucide-react';
+import { Slack, Mail, CheckSquare, Clock, AlertTriangle, MessageSquarePlus, ChevronRight, X, AlertCircle, CheckCircle, BookOpen, MessageCircle, Megaphone, ListTodo, Calendar, Timer, Info, Target, ArrowRight, LayoutDashboard, Eye, PlusCircle, Send, Users, UserCheck, ChevronLeft, ClipboardList, Briefcase, UserPlus, Search, Filter, UserCog, RefreshCw, Loader2 } from 'lucide-react';
 import { generateEmailDraft } from '../services/geminiService';
 import confetti from 'canvas-confetti';
+import { useTeam } from '../hooks/useTeam';
+import { useManagerTasks } from '../hooks/useManagerTasks';
 
 interface ManagerDashboardProps {
   user: User;
@@ -24,8 +26,56 @@ const QUESTION_LABELS: Record<string, string> = {
 };
 
 const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user }) => {
-  const myHires = NEW_HIRES.filter(h => h.managerId === user.id || NEW_HIRES.length > 0); 
-  
+  // Supabase hooks for team data
+  const { team: supabaseTeam, loading: teamLoading } = useTeam(user.id);
+  const { tasks: supabaseTasks, templates: taskTemplates, loading: tasksLoading, toggleTaskCompletion } = useManagerTasks(user.id);
+
+  // Fallback to mock data during transition
+  const mockHires = NEW_HIRES.filter(h => h.managerId === user.id || NEW_HIRES.length > 0);
+
+  // Transform Supabase team data to match NewHireProfile interface
+  const myHires: NewHireProfile[] = useMemo(() => {
+    if (supabaseTeam.length > 0) {
+      return supabaseTeam.map(member => ({
+        id: member.profile.id,
+        name: member.profile.name,
+        email: member.profile.email,
+        role: member.profile.role as any,
+        avatar: member.profile.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(member.profile.name),
+        title: member.profile.title || 'Team Member',
+        managerId: member.profile.manager_id || user.id,
+        startDate: member.profile.start_date || new Date().toISOString().split('T')[0],
+        progress: member.progress,
+        department: member.profile.department || 'Operations',
+        modules: member.modules.map(m => ({
+          id: m.id,
+          title: m.title,
+          description: m.description || '',
+          type: m.type as TrainingModule['type'],
+          duration: m.duration || '',
+          completed: m.progress?.completed || false,
+          dueDate: m.progress?.due_date || new Date().toISOString().split('T')[0],
+          link: m.link || undefined,
+          host: m.host || undefined,
+        })),
+        managerTasks: taskTemplates.map(t => {
+          const userTask = supabaseTasks.find(
+            task => task.template_id === t.id && task.new_hire_id === member.profile.id
+          );
+          return {
+            id: t.id,
+            title: t.title,
+            description: t.description || '',
+            completed: userTask?.completed || false,
+            dueDateOffset: t.due_date_offset,
+            timeEstimate: t.time_estimate || '',
+          };
+        }),
+      }));
+    }
+    return mockHires;
+  }, [supabaseTeam, supabaseTasks, taskTemplates, mockHires, user.id]);
+
   // Navigation State
   const [showWelcomeGuide, setShowWelcomeGuide] = useState(true);
   const [activeTab, setActiveTab] = useState<'team' | 'tracker'>('team');

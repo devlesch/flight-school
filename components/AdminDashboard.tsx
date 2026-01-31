@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, 
 import { Mail, Calendar, TrendingUp, CheckCircle, AlertCircle, FileText, Loader2, Wand2, UploadCloud, Video, ArrowRight, X, Users, Plus, Clock, MessageSquare, Zap, PieChart, Settings, Palette, UserCheck, Search, Send, ChevronLeft, ChevronRight, MessageCircle, Globe, AtSign, Filter, BarChart2, MousePointer2, Check, UserMinus, ArrowLeft, Slack, ClipboardCheck, Info, Target, LayoutDashboard, Star, ShieldCheck, UserCog, UserPlus, ZapOff, Activity, History, HelpCircle, FileUp, Building2, UserCircle, Save, Briefcase, RefreshCw, Edit3, BookOpen, Layers, UserPlus2, UserCheck2, HelpCircle as HelpIcon, Timer, ListTodo } from 'lucide-react';
 import { analyzeProgress, ExtractedHireData, generateManagerNotification, generateEmailDraft } from '../services/geminiService';
 import confetti from 'canvas-confetti';
+import { useAllUsers } from '../hooks/useTeam';
 
 export type AdminViewMode = 'dashboard' | 'workflow' | 'cohorts' | 'agenda' | 'communications' | 'engagement' | 'settings';
 
@@ -29,6 +30,17 @@ const QUESTION_LABELS: Record<string, string> = {
 };
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setViewMode }) => {
+  // Supabase hook for all users (admin view)
+  const { users: supabaseUsers, loading: usersLoading } = useAllUsers();
+
+  // Transform Supabase users to managers/new hires for backward compatibility
+  const allUsers = useMemo(() => {
+    if (supabaseUsers.length > 0) {
+      return supabaseUsers;
+    }
+    return [];
+  }, [supabaseUsers]);
+
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [workflowSubTab, setWorkflowSubTab] = useState<'upload' | 'manual' | 'edit' | 'training'>('upload');
