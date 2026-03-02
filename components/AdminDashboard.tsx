@@ -1,9 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { NewHireProfile, User, CalendarEvent, TrainingModule, UserRole } from '../types';
+import type { Profile } from '../types/database';
 import { NEW_HIRES, MANAGERS, MOCK_TRAINING_MODULES, MANAGER_ONBOARDING_TASKS } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, LabelList, PieChart as RePieChart, Pie, Tooltip, LineChart, Line, AreaChart, Area } from 'recharts';
 import { Mail, Calendar, TrendingUp, CheckCircle, AlertCircle, FileText, Loader2, Wand2, UploadCloud, Video, ArrowRight, X, Users, Plus, Clock, MessageSquare, Zap, PieChart, Settings, Palette, UserCheck, Search, Send, ChevronLeft, ChevronRight, MessageCircle, Globe, AtSign, Filter, BarChart2, MousePointer2, Check, UserMinus, ArrowLeft, Slack, ClipboardCheck, Info, Target, LayoutDashboard, Star, ShieldCheck, UserCog, UserPlus, ZapOff, Activity, History, HelpCircle, FileUp, Building2, UserCircle, Save, Briefcase, RefreshCw, Edit3, BookOpen, Layers, UserPlus2, UserCheck2, HelpCircle as HelpIcon, Timer, ListTodo } from 'lucide-react';
 import { analyzeProgress, ExtractedHireData, generateManagerNotification, generateEmailDraft } from '../services/geminiService';
+import { createModule } from '../services/moduleService';
+import { parseWorkdayExcel, importWorkdayData, ImportResult } from '../services/workdayImportService';
+import { updateProfile } from '../services/profileService';
 import confetti from 'canvas-confetti';
 import { useAllUsers } from '../hooks/useTeam';
 
@@ -31,7 +35,7 @@ const QUESTION_LABELS: Record<string, string> = {
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setViewMode }) => {
   // Supabase hook for all users (admin view)
-  const { users: supabaseUsers, loading: usersLoading } = useAllUsers();
+  const { users: supabaseUsers, loading: usersLoading, refetch: refetchUsers } = useAllUsers();
 
   // Transform Supabase users to managers/new hires for backward compatibility
   const allUsers = useMemo(() => {
@@ -48,8 +52,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [importSuccess, setImportSuccess] = useState(false);
   const [manualHire, setManualHire] = useState({ firstName: '', lastName: '', email: '', managerName: '', managerEmail: '', startDate: '', location: '', role: '', hasDirectReports: false });
   const [editingHireId, setEditingHireId] = useState<string | null>(null);
-  const [editFormData, setEditFormData] = useState({ role: '', managerId: '', email: '', startDate: '' });
+  const [editFormData, setEditFormData] = useState({ name: '', role: '', managerId: '', email: '', startDate: '', department: '', region: '', userRole: 'New Hire' as UserRole });
+  const [registryFilters, setRegistryFilters] = useState({ employee: '', role: '', manager: '', startDate: '' });
+
+  const filteredRegistryUsers = useMemo(() => {
+    return allUsers.filter(profile => {
+      if (registryFilters.employee) {
+        const q = registryFilters.employee.toLowerCase();
+        const match = profile.name.toLowerCase().includes(q) ||
+          (profile.title || '').toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      if (registryFilters.role && profile.role !== registryFilters.role) return false;
+      if (registryFilters.manager && profile.manager_id !== registryFilters.manager) return false;
+      if (registryFilters.startDate && !(profile.start_date || '').includes(registryFilters.startDate)) return false;
+      return true;
+    });
+  }, [allUsers, registryFilters]);
+
   const [trainingData, setTrainingData] = useState({ title: '', description: '', method: 'MANAGER_LED' as TrainingModule['type'], targetRole: 'All Roles', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
+  const [taskCategory, setTaskCategory] = useState<'module' | 'call'>('module');
+  const [link, setLink] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const [taskSuccess, setTaskSuccess] = useState(false);
   const [messageTarget, setMessageTarget] = useState<'managers' | 'newhires'>('newhires');
   const [messageSearch, setMessageSearch] = useState('');
   const [commsDraft, setCommsDraft] = useState('');
@@ -62,6 +88,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [selectedCohortManager, setSelectedCohortManager] = useState<User | null>(null);
   const [cohortsSearch, setCohortsSearch] = useState('');
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date(2026, 0, 1));
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [isSyncingCalendar, setIsSyncingCalendar] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
@@ -134,10 +162,37 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     }));
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setIsProcessingFile(true);
-      setTimeout(() => { setIsProcessingFile(false); setImportSuccess(true); confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } }); }, 2000);
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+
+    // Validate file extension
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'xls') {
+      setImportError('Please upload an .xlsx or .xls file.');
+      return;
+    }
+
+    setIsProcessingFile(true);
+    setImportError(null);
+    setImportResult(null);
+
+    try {
+      const rows = await parseWorkdayExcel(file);
+      if (rows.length === 0) {
+        setImportError('No valid data rows found in the uploaded file. Check the file format.');
+        setIsProcessingFile(false);
+        return;
+      }
+      const result = await importWorkdayData(rows);
+      setImportResult(result);
+      setImportSuccess(true);
+      await refetchUsers();
+      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'An unexpected error occurred during import.');
+    } finally {
+      setIsProcessingFile(false);
     }
   };
 
@@ -162,24 +217,57 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     setManualHire({ firstName: '', lastName: '', email: '', managerName: '', managerEmail: '', startDate: '', location: '', role: '', hasDirectReports: false });
   };
 
-  const handleUpdateHire = (e: React.FormEvent) => {
+  const handleUpdateHire = async (e: React.FormEvent) => {
     e.preventDefault();
-    const hire = NEW_HIRES.find(h => h.id === editingHireId);
-    if (hire) {
-      hire.title = editFormData.role; hire.managerId = editFormData.managerId; hire.email = editFormData.email; hire.startDate = editFormData.startDate;
-      alert("Updates saved."); setEditingHireId(null);
+    if (!editingHireId) return;
+    const result = await updateProfile(editingHireId, {
+      name: editFormData.name,
+      title: editFormData.role,
+      manager_id: editFormData.managerId || null,
+      email: editFormData.email,
+      start_date: editFormData.startDate || null,
+      department: editFormData.department || null,
+      region: editFormData.region || null,
+      role: editFormData.userRole,
+    });
+    if (result) {
+      await refetchUsers();
+      setEditingHireId(null);
+    } else {
+      alert('Failed to save changes. Please try again.');
     }
   };
 
-  const handleAddTraining = (e: React.FormEvent) => {
+  const handleAddTraining = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert(`Training "${trainingData.title}" created.`);
-    setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
+    setSubmitting(true);
+    setTaskError(null);
+
+    const result = await createModule({
+      title: trainingData.title,
+      type: taskCategory === 'call' ? 'LIVE_CALL' : trainingData.method,
+      link: link || null,
+      target_role: trainingData.targetRole === 'All Roles' ? null : trainingData.targetRole,
+    });
+
+    setSubmitting(false);
+
+    if (result) {
+      setTaskSuccess(true);
+      setTimeout(() => {
+        setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
+        setTaskCategory('module');
+        setLink('');
+        setTaskSuccess(false);
+      }, 1500);
+    } else {
+      setTaskError('Failed to save task. Please try again.');
+    }
   };
 
-  const startEditingHire = (hire: NewHireProfile) => {
-    setEditingHireId(hire.id);
-    setEditFormData({ role: hire.title, managerId: hire.managerId, email: hire.email, startDate: hire.startDate });
+  const startEditingHire = (profile: Profile) => {
+    setEditingHireId(profile.id);
+    setEditFormData({ name: profile.name, role: profile.title || '', managerId: profile.manager_id || '', email: profile.email, startDate: profile.start_date || '', department: profile.department || '', region: profile.region || '', userRole: profile.role });
   };
 
   const handleAnalyze = async () => {
@@ -315,7 +403,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                 { id: 'upload', label: 'Workday Import', icon: FileUp },
                 { id: 'manual', label: 'New Team Member', icon: UserPlus2 },
                 { id: 'edit', label: 'Team Registry', icon: UserCog },
-                { id: 'training', label: 'Upload Training', icon: BookOpen }
+                { id: 'training', label: 'Upload Task', icon: BookOpen }
               ].map(tab => (
                 <button 
                   key={tab.id} onClick={() => setWorkflowSubTab(tab.id as any)}
@@ -337,22 +425,51 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                    <p className="text-[#013E3F]/60 max-w-sm mx-auto mb-8 leading-relaxed text-sm font-medium">
                      Upload your Workday New Hire Report (CSV or Excel) to automatically create member profiles and link them to managers. This triggers regional roadmap assignments and identity verification.
                    </p>
-                   {importSuccess ? <button onClick={() => setImportSuccess(false)} className="text-[#013E3F] font-bold text-xs underline">Upload another report</button> : <div className="relative group"><input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={handleFileUpload} disabled={isProcessingFile} /><button className="bg-[#013E3F] text-white px-12 py-4 rounded-xl font-bold uppercase text-xs flex items-center gap-3">Select Workday Report <FileText className="w-4 h-4" /></button></div>}
+                   {importSuccess ? <button onClick={() => { setImportSuccess(false); setImportResult(null); setImportError(null); }} className="text-[#013E3F] font-bold text-xs underline">Upload another report</button> : <div className="relative group"><input type="file" accept=".xlsx,.xls" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={handleFileUpload} disabled={isProcessingFile} /><button className="bg-[#013E3F] text-white px-12 py-4 rounded-xl font-bold uppercase text-xs flex items-center gap-3">Select Workday Report <FileText className="w-4 h-4" /></button></div>}
+                   {importError && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs font-medium whitespace-pre-wrap max-h-48 overflow-y-auto">{importError}</div>}
                 </div>
                 <div className="bg-[#F3EEE7]/20 border border-[#F3EEE7]/10 p-8 rounded-2xl">
-                   <h4 className="text-xs font-bold uppercase tracking-[2px] text-[#FDD344] mb-6 flex items-center gap-2"><Info className="w-4 h-4" /> Import Logic</h4>
-                   <div className="space-y-4">
-                      {[
-                        { title: 'Identity Verification', desc: 'New hires are identified by their official Workday email address and mapped to their Flight School profile.' },
-                        { title: 'Management Mapping', desc: 'System automatically assigns the supervisor listed in the "Superior" column as the manager in Flight School.' },
-                        { title: 'Regional Automation', desc: 'Location, Unit, and regional cohort assignments are synced based on the "Unit Assignment" column.' }
-                      ].map((item, idx) => (
-                        <div key={idx} className="flex gap-4">
-                           <div className="w-5 h-5 shrink-0 rounded-full bg-[#013E3F]/10 flex items-center justify-center text-[10px] font-bold text-[#013E3F]">{idx+1}</div>
-                           <div><p className="text-xs font-bold text-[#F3EEE7]">{item.title}</p><p className="text-xs text-[#F3EEE7]/50 mt-1">{item.desc}</p></div>
-                        </div>
-                      ))}
-                   </div>
+                   {importResult ? (
+                     <>
+                       <h4 className="text-xs font-bold uppercase tracking-[2px] text-[#FDD344] mb-6 flex items-center gap-2"><CheckCircle className="w-4 h-4" /> Import Results</h4>
+                       <div className="grid grid-cols-2 gap-3 mb-6">
+                         <div className="p-3 bg-green-900/30 rounded-lg text-center"><p className="text-[10px] font-bold uppercase text-green-400">Created</p><p className="text-2xl font-serif text-green-300">{importResult.created}</p></div>
+                         <div className="p-3 bg-blue-900/30 rounded-lg text-center"><p className="text-[10px] font-bold uppercase text-blue-400">Updated</p><p className="text-2xl font-serif text-blue-300">{importResult.updated}</p></div>
+                         <div className="p-3 bg-[#013E3F]/30 rounded-lg text-center"><p className="text-[10px] font-bold uppercase text-[#F3EEE7]/50">Skipped</p><p className="text-2xl font-serif text-[#F3EEE7]/60">{importResult.skipped}</p></div>
+                         <div className="p-3 bg-amber-900/30 rounded-lg text-center"><p className="text-[10px] font-bold uppercase text-amber-400">Managers</p><p className="text-2xl font-serif text-amber-300">{importResult.managersCreated}</p></div>
+                       </div>
+                       {importResult.errors.length > 0 && (
+                         <div className="mb-4 p-3 bg-red-900/20 border border-red-500/20 rounded-lg">
+                           <p className="text-[10px] font-bold uppercase text-red-400 mb-2">Errors ({importResult.errors.length})</p>
+                           <div className="max-h-32 overflow-y-auto space-y-1">
+                             {importResult.errors.map((err, i) => <p key={i} className="text-[10px] text-red-300">{err}</p>)}
+                           </div>
+                         </div>
+                       )}
+                       <div className="max-h-48 overflow-y-auto space-y-1">
+                         {importResult.details.slice(0, 20).map((detail, i) => (
+                           <p key={i} className="text-[10px] text-[#F3EEE7]/50">{detail}</p>
+                         ))}
+                         {importResult.details.length > 20 && <p className="text-[10px] text-[#F3EEE7]/30 italic">...and {importResult.details.length - 20} more</p>}
+                       </div>
+                     </>
+                   ) : (
+                     <>
+                       <h4 className="text-xs font-bold uppercase tracking-[2px] text-[#FDD344] mb-6 flex items-center gap-2"><Info className="w-4 h-4" /> Import Logic</h4>
+                       <div className="space-y-4">
+                          {[
+                            { title: 'Identity Verification', desc: 'New hires are identified by their official Workday email address and mapped to their Flight School profile.' },
+                            { title: 'Management Mapping', desc: 'System automatically assigns the supervisor listed in the "Superior" column as the manager in Flight School.' },
+                            { title: 'Regional Automation', desc: 'Location, Unit, and regional cohort assignments are synced based on the "Unit Assignment" column.' }
+                          ].map((item, idx) => (
+                            <div key={idx} className="flex gap-4">
+                               <div className="w-5 h-5 shrink-0 rounded-full bg-[#013E3F]/10 flex items-center justify-center text-[10px] font-bold text-[#013E3F]">{idx+1}</div>
+                               <div><p className="text-xs font-bold text-[#F3EEE7]">{item.title}</p><p className="text-xs text-[#F3EEE7]/50 mt-1">{item.desc}</p></div>
+                            </div>
+                          ))}
+                       </div>
+                     </>
+                   )}
                 </div>
              </div>
            )}
@@ -402,31 +519,142 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                    <h3 className="text-3xl font-serif text-[#013E3F]">Management Tool: Team Registry</h3>
                    <p className="text-sm italic text-[#013E3F]/60 mt-4 leading-relaxed"><strong>Distinction:</strong> Use this page to update details for active team members already in the system. Edit their role, manager, or organizational details when changes occur.</p>
                 </div>
-                <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-[#F9F7F5] text-[#013E3F]/40 text-[10px] uppercase font-bold tracking-widest border-b"><tr><th className="px-8 py-4">Employee</th><th className="px-8 py-4">Current Manager</th><th className="px-8 py-4">Start Date</th><th className="px-8 py-4 text-right">Edit</th></tr></thead><tbody className="divide-y divide-[#F3EEE7]">{NEW_HIRES.map(hire => (<tr key={hire.id} className="hover:bg-[#F9F7F5] transition-colors"><td className="px-8 py-5 flex items-center gap-3"><img src={hire.avatar} className="w-10 h-10 rounded-full" /><div><p className="font-serif font-bold text-[#013E3F]">{hire.name}</p><p className="text-[10px] uppercase text-[#013E3F]/40 tracking-wider">{hire.title}</p></div></td><td className="px-8 py-5 text-xs font-bold text-[#013E3F]/60">{MANAGERS.find(m => m.id === hire.managerId)?.name}</td><td className="px-8 py-5 text-xs text-[#013E3F]/60">{hire.startDate}</td><td className="px-8 py-5 text-right"><button onClick={() => startEditingHire(hire)} className="p-2 hover:bg-[#013E3F]/5 rounded-lg text-[#013E3F]/40 hover:text-[#013E3F]"><Edit3 className="w-4 h-4" /></button></td></tr>))}</tbody></table></div>
+                {usersLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-[#013E3F]/40">
+                    <Loader2 className="w-8 h-8 animate-spin mb-4" />
+                    <p className="text-sm font-bold uppercase tracking-widest">Loading team registry…</p>
+                  </div>
+                ) : allUsers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-[#013E3F]/40">
+                    <Users className="w-10 h-10 mb-4 opacity-30" />
+                    <p className="text-sm font-bold uppercase tracking-widest">No profiles found</p>
+                    <p className="text-xs mt-2 opacity-60">Import from Workday or add a team member manually.</p>
+                  </div>
+                ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-[#F9F7F5] text-[#013E3F]/40 text-[10px] uppercase font-bold tracking-widest border-b">
+                      <tr>
+                        <th className="px-8 py-4">Employee</th>
+                        <th className="px-8 py-4">Role</th>
+                        <th className="px-8 py-4">Current Manager</th>
+                        <th className="px-8 py-4">Start Date</th>
+                        <th className="px-8 py-4 text-right">Edit</th>
+                      </tr>
+                      <tr className="bg-white border-b border-[#013E3F]/10">
+                        <th className="px-8 py-2">
+                          <input
+                            type="text"
+                            placeholder="Search name or title…"
+                            value={registryFilters.employee}
+                            onChange={e => setRegistryFilters(f => ({ ...f, employee: e.target.value }))}
+                            className="text-xs bg-white border border-[#013E3F]/15 rounded-md px-2 py-1.5 text-[#013E3F] focus:ring-1 focus:ring-[#013E3F] w-full font-normal normal-case tracking-normal outline-none"
+                          />
+                        </th>
+                        <th className="px-8 py-2">
+                          <select
+                            value={registryFilters.role}
+                            onChange={e => setRegistryFilters(f => ({ ...f, role: e.target.value }))}
+                            className="text-xs bg-white border border-[#013E3F]/15 rounded-md px-2 py-1.5 text-[#013E3F] focus:ring-1 focus:ring-[#013E3F] w-full font-normal normal-case tracking-normal outline-none"
+                          >
+                            <option value="">All</option>
+                            <option value="Admin">Admin</option>
+                            <option value="Manager">Manager</option>
+                            <option value="New Hire">New Hire</option>
+                          </select>
+                        </th>
+                        <th className="px-8 py-2">
+                          <select
+                            value={registryFilters.manager}
+                            onChange={e => setRegistryFilters(f => ({ ...f, manager: e.target.value }))}
+                            className="text-xs bg-white border border-[#013E3F]/15 rounded-md px-2 py-1.5 text-[#013E3F] focus:ring-1 focus:ring-[#013E3F] w-full font-normal normal-case tracking-normal outline-none"
+                          >
+                            <option value="">All</option>
+                            {[...new Map(allUsers.filter(u => allUsers.some(p => p.manager_id === u.id)).map(u => [u.id, u.name])).entries()].map(([id, name]) => (
+                              <option key={id} value={id}>{name}</option>
+                            ))}
+                          </select>
+                        </th>
+                        <th className="px-8 py-2">
+                          <input
+                            type="month"
+                            value={registryFilters.startDate}
+                            onChange={e => setRegistryFilters(f => ({ ...f, startDate: e.target.value }))}
+                            className="text-xs bg-white border border-[#013E3F]/15 rounded-md px-2 py-1.5 text-[#013E3F] focus:ring-1 focus:ring-[#013E3F] w-full font-normal normal-case tracking-normal outline-none"
+                          />
+                        </th>
+                        <th className="px-8 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F3EEE7]">
+                      {filteredRegistryUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-8 py-16 text-center">
+                            <p className="text-sm font-bold text-[#013E3F]/40">No team members match the current filters</p>
+                            <button
+                              onClick={() => setRegistryFilters({ employee: '', role: '', manager: '', startDate: '' })}
+                              className="mt-3 text-xs font-bold uppercase tracking-wider text-[#013E3F]/60 hover:text-[#013E3F] underline underline-offset-2"
+                            >
+                              Clear filters
+                            </button>
+                          </td>
+                        </tr>
+                      ) : filteredRegistryUsers.map(profile => (
+                        <tr key={profile.id} className="hover:bg-[#F9F7F5] transition-colors">
+                          <td className="px-8 py-5 flex items-center gap-3">
+                            <img src={profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=013E3F&color=F3EEE7`} className="w-10 h-10 rounded-full" />
+                            <div>
+                              <p className="font-serif font-bold text-[#013E3F]">{profile.name}</p>
+                              <p className="text-[10px] uppercase text-[#013E3F]/40 tracking-wider">{profile.title || '—'}</p>
+                            </div>
+                          </td>
+                          <td className="px-8 py-5">
+                            <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${profile.role === 'Admin' ? 'bg-purple-100 text-purple-700' : profile.role === 'Manager' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>{profile.role}</span>
+                          </td>
+                          <td className="px-8 py-5 text-xs font-bold text-[#013E3F]/60">{profile.manager_id ? allUsers.find(u => u.id === profile.manager_id)?.name || '—' : '—'}</td>
+                          <td className="px-8 py-5 text-xs text-[#013E3F]/60">{profile.start_date || '—'}</td>
+                          <td className="px-8 py-5 text-right">
+                            <button onClick={() => startEditingHire(profile)} className="p-2 hover:bg-[#013E3F]/5 rounded-lg text-[#013E3F]/40 hover:text-[#013E3F]"><Edit3 className="w-4 h-4" /></button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                )}
              </div>
            )}
 
            {/* 4. CURRICULUM BUILDER */}
            {workflowSubTab === 'training' && (
              <div className="bg-[#012d2e] rounded-2xl shadow-xl border border-[#F3EEE7]/10 overflow-hidden">
-                <div className="p-10 bg-[#001f20] text-[#F3EEE7] border-b border-[#F3EEE7]/5 flex items-center justify-between"><div><h3 className="text-3xl font-serif">Curriculum Module Builder</h3><p className="text-[#FDD344] text-xs font-bold uppercase tracking-widest mt-1">Multi-method training mapping</p></div><Layers className="w-10 h-10 opacity-20" /></div>
+                <div className="p-10 bg-[#001f20] text-[#F3EEE7] border-b border-[#F3EEE7]/5 flex items-center justify-between"><div><h3 className="text-3xl font-serif">Task Builder</h3><p className="text-[#FDD344] text-xs font-bold uppercase tracking-widest mt-1">Multi-method training mapping</p></div><Layers className="w-10 h-10 opacity-20" /></div>
                 <form onSubmit={handleAddTraining} className="p-10 space-y-12 text-[#F3EEE7]">
+                   {/* Module / Call segmented control */}
+                   <div className="flex bg-white/10 p-1 rounded-xl border border-white/10 w-fit">
+                     <button type="button" onClick={() => { setTaskCategory('module'); setTrainingData({...trainingData, method: 'MANAGER_LED'}); }} className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${taskCategory === 'module' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>Module</button>
+                     <button type="button" onClick={() => { setTaskCategory('call'); setTrainingData({...trainingData, method: 'LIVE_CALL'}); }} className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${taskCategory === 'call' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>Call</button>
+                   </div>
                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                       <div className="space-y-8">
                          <h4 className="text-[11px] font-bold uppercase text-[#F3EEE7]/40 tracking-[3px] border-b border-[#F3EEE7]/10 pb-2">Structure</h4>
                          <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Module Title</label><input required className="w-full bg-[#013E3F] border-b border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" placeholder="Member Crisis Resolution" value={trainingData.title} onChange={e => setTrainingData({...trainingData, title: e.target.value})} /></div>
                          <div className="grid grid-cols-2 gap-6">
-                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Method</label><select className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-3 text-sm" value={trainingData.method} onChange={e => setTrainingData({...trainingData, method: e.target.value as any})}><option value="MANAGER_LED">Manager Led</option><option value="LESSONLY">Lessonly</option><option value="WORKBOOK">Self-Led Workbook</option><option value="LIVE_CALL">Hosted Training</option><option value="PERFORM">Perform (#Ownership)</option><option value="PEER_PARTNER">Peer Partner</option></select></div>
+                            {taskCategory === 'module' && <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80" htmlFor="method-select">Method</label><select id="method-select" aria-label="Method" className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-3 text-sm" value={trainingData.method} onChange={e => setTrainingData({...trainingData, method: e.target.value as any})}><option value="MANAGER_LED">Manager Led</option><option value="LESSONLY">Lessonly</option><option value="WORKBOOK">Self-Led Workbook</option><option value="LIVE_CALL">Hosted Training</option><option value="PERFORM">Perform (#Ownership)</option><option value="PEER_PARTNER">Peer Partner</option></select></div>}
                             <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Day Offset</label><input type="number" className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-3 text-sm" value={trainingData.assignmentDay} onChange={e => setTrainingData({...trainingData, assignmentDay: parseInt(e.target.value)})} /></div>
                          </div>
+                         <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Link</label><input className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-3 text-sm focus:border-[#FDD344] outline-none" placeholder="https://app.lessonly.com or Google Slides link..." value={link} onChange={e => setLink(e.target.value)} /></div>
                       </div>
                       <div className="space-y-8">
                          <h4 className="text-[11px] font-bold uppercase text-[#F3EEE7]/40 tracking-[3px] border-b border-[#F3EEE7]/10 pb-2">Targeting</h4>
                          <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Target Role</label><select className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-3 text-sm" value={trainingData.targetRole} onChange={e => setTrainingData({...trainingData, targetRole: e.target.value})}><option>All Roles</option><option>Assistant General Manager</option><option>Regional Director</option><option>MXA</option><option>MXM</option></select></div>
-                         <div className="p-6 bg-[#F3EEE7]/5 rounded-xl border border-[#F3EEE7]/10 space-y-6"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><BookOpen className="w-4 h-4" /><p className="text-xs font-bold uppercase">Workbook Prompt</p></div><button type="button" onClick={() => setTrainingData({...trainingData, hasWorkbook: !trainingData.hasWorkbook})} className={`w-12 h-6 rounded-full relative flex items-center transition-colors ${trainingData.hasWorkbook ? 'bg-green-600' : 'bg-[#F3EEE7]/20'}`}><div className={`w-5 h-5 bg-white rounded-full transition-transform ${trainingData.hasWorkbook ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>{trainingData.hasWorkbook && <textarea className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-4 text-sm focus:border-[#FDD344] outline-none h-24" placeholder="Enter reflection question..." value={trainingData.workbookContent} onChange={e => setTrainingData({...trainingData, workbookContent: e.target.value})} />}</div>
+                         {taskCategory === 'module' && <div className="p-6 bg-[#F3EEE7]/5 rounded-xl border border-[#F3EEE7]/10 space-y-6"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><BookOpen className="w-4 h-4" /><p className="text-xs font-bold uppercase">Workbook Prompt</p></div><button type="button" onClick={() => setTrainingData({...trainingData, hasWorkbook: !trainingData.hasWorkbook})} className={`w-12 h-6 rounded-full relative flex items-center transition-colors ${trainingData.hasWorkbook ? 'bg-green-600' : 'bg-[#F3EEE7]/20'}`}><div className={`w-5 h-5 bg-white rounded-full transition-transform ${trainingData.hasWorkbook ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>{trainingData.hasWorkbook && <textarea className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-4 text-sm focus:border-[#FDD344] outline-none h-24" placeholder="Enter reflection question..." value={trainingData.workbookContent} onChange={e => setTrainingData({...trainingData, workbookContent: e.target.value})} />}</div>}
                       </div>
                    </div>
-                   <div className="pt-8 border-t border-[#F3EEE7]/10 flex justify-end"><button type="submit" className="bg-[#FDD344] text-[#013E3F] px-12 py-3 rounded-xl font-bold uppercase text-xs">Assign Resource</button></div>
+                   <div className="pt-8 border-t border-[#F3EEE7]/10 flex flex-col items-end gap-3">
+                     <button type="submit" disabled={submitting || taskSuccess} className={`px-12 py-3 rounded-xl font-bold uppercase text-xs transition-colors ${taskSuccess ? 'bg-green-600 text-white' : 'bg-[#FDD344] text-[#013E3F]'}`}>{taskSuccess ? '✓ Task Assigned' : submitting ? 'Saving...' : 'Assign Resource'}</button>
+                     {taskError && <p className="text-red-400 text-xs">{taskError}</p>}
+                   </div>
                 </form>
              </div>
            )}
@@ -849,7 +1077,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       )}
 
       {editingHireId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"><div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 border border-[#013E3F]/10"><div className="p-6 bg-[#013E3F] text-white flex justify-between items-center"><h3 className="font-serif text-xl">Edit Registry Details</h3><button onClick={() => setEditingHireId(null)}><X className="w-6 h-6" /></button></div><form onSubmit={handleUpdateHire} className="p-8 space-y-6"><div className="space-y-4"><div><label className="block text-[10px] font-bold uppercase opacity-40 mb-1">Email</label><input type="email" className="w-full border rounded-lg p-3 text-sm focus:ring-1 focus:ring-[#013E3F]" value={editFormData.email} onChange={e => setEditFormData({...editFormData, email: e.target.value})} /></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-[10px] font-bold uppercase opacity-40 mb-1">Role</label><input className="w-full border rounded-lg p-3 text-sm focus:ring-1 focus:ring-[#013E3F]" value={editFormData.role} onChange={e => setEditFormData({...editFormData, role: e.target.value})} /></div><div><label className="block text-[10px] font-bold uppercase opacity-40 mb-1">Start Date</label><input type="date" className="w-full border rounded-lg p-3 text-sm focus:ring-1 focus:ring-[#013E3F]" value={editFormData.startDate} onChange={e => setEditFormData({...editFormData, startDate: e.target.value})} /></div></div><div><label className="block text-[10px] font-bold uppercase opacity-40 mb-1">Assigned Manager</label><select className="w-full border rounded-lg p-3 text-sm focus:ring-1 focus:ring-[#013E3F]" value={editFormData.managerId} onChange={e => setEditFormData({...editFormData, managerId: e.target.value})}>{MANAGERS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div></div><div className="flex gap-3 pt-4"><button type="button" onClick={() => setEditingHireId(null)} className="flex-1 py-3 text-xs font-bold uppercase border rounded-lg hover:bg-gray-50 transition-colors">Discard</button><button type="submit" className="flex-1 py-3 bg-[#013E3F] text-white text-xs font-bold uppercase rounded-lg shadow-lg hover:bg-[#013E3F]/90 transition-all">Save Changes</button></div></form></div></div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"><div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 border border-[#013E3F]/10"><div className="p-6 bg-[#013E3F] text-white flex justify-between items-center"><h3 className="font-serif text-xl">Edit Registry Details</h3><button onClick={() => setEditingHireId(null)}><X className="w-6 h-6" /></button></div><form onSubmit={handleUpdateHire} className="p-8 space-y-6"><div className="space-y-4"><div><label className="block text-[10px] font-bold uppercase text-[#013E3F]/70 mb-1">Name</label><input className="w-full border-[#013E3F]/20 border rounded-lg p-3 text-sm text-[#013E3F] focus:ring-1 focus:ring-[#013E3F]" value={editFormData.name} onChange={e => setEditFormData({...editFormData, name: e.target.value})} required /></div><div><label className="block text-[10px] font-bold uppercase text-[#013E3F]/70 mb-1">Email</label><input type="email" className="w-full border-[#013E3F]/20 border rounded-lg p-3 text-sm text-[#013E3F] focus:ring-1 focus:ring-[#013E3F]" value={editFormData.email} onChange={e => setEditFormData({...editFormData, email: e.target.value})} /></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-[10px] font-bold uppercase text-[#013E3F]/70 mb-1">Role (Title)</label><input className="w-full border-[#013E3F]/20 border rounded-lg p-3 text-sm text-[#013E3F] focus:ring-1 focus:ring-[#013E3F]" value={editFormData.role} onChange={e => setEditFormData({...editFormData, role: e.target.value})} /></div><div><label className="block text-[10px] font-bold uppercase text-[#013E3F]/70 mb-1">Start Date</label><input type="date" className="w-full border-[#013E3F]/20 border rounded-lg p-3 text-sm text-[#013E3F] focus:ring-1 focus:ring-[#013E3F]" value={editFormData.startDate} onChange={e => setEditFormData({...editFormData, startDate: e.target.value})} /></div></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-[10px] font-bold uppercase text-[#013E3F]/70 mb-1">Department</label><input className="w-full border-[#013E3F]/20 border rounded-lg p-3 text-sm text-[#013E3F] focus:ring-1 focus:ring-[#013E3F]" value={editFormData.department} onChange={e => setEditFormData({...editFormData, department: e.target.value})} /></div><div><label className="block text-[10px] font-bold uppercase text-[#013E3F]/70 mb-1">Region</label><input className="w-full border-[#013E3F]/20 border rounded-lg p-3 text-sm text-[#013E3F] focus:ring-1 focus:ring-[#013E3F]" value={editFormData.region} onChange={e => setEditFormData({...editFormData, region: e.target.value})} /></div></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-[10px] font-bold uppercase text-[#013E3F]/70 mb-1">System Role</label><select className="w-full border-[#013E3F]/20 border rounded-lg p-3 text-sm text-[#013E3F] focus:ring-1 focus:ring-[#013E3F]" value={editFormData.userRole} onChange={e => setEditFormData({...editFormData, userRole: e.target.value as UserRole})}><option value="Admin">Admin</option><option value="Manager">Manager</option><option value="New Hire">New Hire</option></select></div><div><label className="block text-[10px] font-bold uppercase text-[#013E3F]/70 mb-1">Assigned Manager</label><select className="w-full border-[#013E3F]/20 border rounded-lg p-3 text-sm text-[#013E3F] focus:ring-1 focus:ring-[#013E3F]" value={editFormData.managerId} onChange={e => setEditFormData({...editFormData, managerId: e.target.value})}><option value="">None</option>{allUsers.filter(u => u.role === 'Manager').map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div></div></div><div className="flex gap-3 pt-4"><button type="button" onClick={() => setEditingHireId(null)} className="flex-1 py-3 text-xs font-bold uppercase border rounded-lg text-[#013E3F] hover:bg-gray-50 transition-colors">Discard</button><button type="submit" className="flex-1 py-3 bg-[#013E3F] text-white text-xs font-bold uppercase rounded-lg shadow-lg hover:bg-[#013E3F]/90 transition-all">Save Changes</button></div></form></div></div>
       )}
     </div>
   );
