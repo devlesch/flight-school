@@ -34,6 +34,7 @@ export interface Database {
           manager_id: string | null;
           department: string | null;
           start_date: string | null;
+          provisioned: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -48,6 +49,7 @@ export interface Database {
           manager_id?: string | null;
           department?: string | null;
           start_date?: string | null;
+          provisioned?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -62,6 +64,7 @@ export interface Database {
           manager_id?: string | null;
           department?: string | null;
           start_date?: string | null;
+          provisioned?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -76,6 +79,7 @@ export interface Database {
           link: string | null;
           host: string | null;
           sort_order: number;
+          target_role: string | null;
           created_at: string;
         };
         Insert: {
@@ -87,6 +91,7 @@ export interface Database {
           link?: string | null;
           host?: string | null;
           sort_order?: number;
+          target_role?: string | null;
           created_at?: string;
         };
         Update: {
@@ -98,6 +103,7 @@ export interface Database {
           link?: string | null;
           host?: string | null;
           sort_order?: number;
+          target_role?: string | null;
           created_at?: string;
         };
       };
