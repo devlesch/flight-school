@@ -2,6 +2,25 @@ import { supabase } from '../lib/supabase';
 import type { TrainingModule, UserModule } from '../types/database';
 
 /**
+ * Create a new training module definition
+ */
+export async function createModule(data: TrainingModule['Insert']): Promise<TrainingModule | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: created, error } = await (supabase as any)
+    .from('training_modules')
+    .insert(data)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating module:', error.message);
+    return null;
+  }
+
+  return created as TrainingModule;
+}
+
+/**
  * Get all training module definitions
  */
 export async function getModules(): Promise<TrainingModule[]> {
