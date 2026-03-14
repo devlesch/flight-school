@@ -222,7 +222,8 @@ describe('App', () => {
       // Should show sidebar navigation items
       expect(screen.getByText('Admin Console')).toBeInTheDocument();
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
-      expect(screen.getByText('Workflow & Tasks')).toBeInTheDocument();
+      expect(screen.getByText('People')).toBeInTheDocument();
+      expect(screen.getByText('Tasks')).toBeInTheDocument();
       expect(screen.getByText('New Bees & Cohorts')).toBeInTheDocument();
     });
 
@@ -244,8 +245,8 @@ describe('App', () => {
 
       render(<App />);
 
-      // Click Workflow & Tasks in sidebar
-      fireEvent.click(screen.getByText('Workflow & Tasks'));
+      // Click People in sidebar
+      fireEvent.click(screen.getByText('People'));
 
       // The AdminDashboard should now show Workflow view subtitle
       expect(screen.getByText('Import team members, manage active registry, and automate training.')).toBeInTheDocument();

@@ -21,6 +21,29 @@ export async function createModule(data: TrainingModule['Insert']): Promise<Trai
 }
 
 /**
+ * Update an existing training module definition
+ */
+export async function updateModule(
+  id: string,
+  data: TrainingModule['Update']
+): Promise<TrainingModule | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: updated, error } = await (supabase as any)
+    .from('training_modules')
+    .update(data)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating module:', error.message);
+    return null;
+  }
+
+  return updated as TrainingModule;
+}
+
+/**
  * Get all training module definitions
  */
 export async function getModules(): Promise<TrainingModule[]> {

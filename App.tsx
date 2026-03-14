@@ -10,7 +10,7 @@ import NewHireDashboard from './components/NewHireDashboard';
 import Login from './components/Login';
 import ErrorBoundary from './components/ErrorBoundary';
 import ConnectionStatus from './components/ConnectionStatus';
-import { LayoutDashboard, Users, BookOpen, LogOut, Menu, ClipboardList, Calendar, MessageSquare, PieChart, Settings, ChevronRight, Loader2 } from 'lucide-react';
+import { LayoutDashboard, Users, BookOpen, LogOut, Menu, ClipboardList, Calendar, MessageSquare, PieChart, Settings, ChevronRight, Loader2, ListTodo } from 'lucide-react';
 
 // Using a data URI for a reliable, offline-capable logo placeholder that resembles the brand
 const INDUSTRIOUS_LOGO_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 60'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='serif' font-weight='bold' font-size='32' fill='%23F3EEE7' letter-spacing='4'%3EINDUSTRIOUS%3C/text%3E%3C/svg%3E";
@@ -169,7 +169,14 @@ const App: React.FC = () => {
                    onClick={() => { handleViewSwitch(UserRole.ADMIN); setAdminViewMode('workflow'); }}
                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all ${currentView === UserRole.ADMIN && adminViewMode === 'workflow' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
                  >
-                    <ClipboardList className="w-5 h-5" /> Workflow & Tasks
+                    <ClipboardList className="w-5 h-5" /> People
+                 </button>
+
+                 <button
+                   onClick={() => { handleViewSwitch(UserRole.ADMIN); setAdminViewMode('tasks'); }}
+                   className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all ${currentView === UserRole.ADMIN && adminViewMode === 'tasks' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
+                 >
+                    <ListTodo className="w-5 h-5" /> Tasks
                  </button>
 
                  <button
@@ -206,7 +213,7 @@ const App: React.FC = () => {
                  >
                     <div className="flex items-center gap-3">
                       <Settings className="w-5 h-5" />
-                      Settings & Branding
+                      Settings
                     </div>
                     <ChevronRight className={`w-4 h-4 transition-transform ${currentView === UserRole.ADMIN && adminViewMode === 'settings' ? 'rotate-90' : 'opacity-40'}`} />
                  </button>

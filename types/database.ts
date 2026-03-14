@@ -31,6 +31,8 @@ export interface Database {
           avatar: string | null;
           title: string | null;
           region: string | null;
+          location: string | null;
+          standardized_role: string | null;
           manager_id: string | null;
           department: string | null;
           start_date: string | null;
@@ -46,6 +48,8 @@ export interface Database {
           avatar?: string | null;
           title?: string | null;
           region?: string | null;
+          location?: string | null;
+          standardized_role?: string | null;
           manager_id?: string | null;
           department?: string | null;
           start_date?: string | null;
@@ -61,6 +65,8 @@ export interface Database {
           avatar?: string | null;
           title?: string | null;
           region?: string | null;
+          location?: string | null;
+          standardized_role?: string | null;
           manager_id?: string | null;
           department?: string | null;
           start_date?: string | null;
@@ -329,6 +335,55 @@ export interface Database {
           created_at?: string;
         };
       };
+      cohorts: {
+        Row: {
+          id: string;
+          name: string;
+          hire_start_date: string;
+          hire_end_date: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          hire_start_date: string;
+          hire_end_date: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          hire_start_date?: string;
+          hire_end_date?: string;
+          created_at?: string;
+        };
+      };
+      cohort_leaders: {
+        Row: {
+          id: string;
+          cohort_id: string;
+          role_label: string;
+          region: string;
+          profile_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          cohort_id: string;
+          role_label: string;
+          region: string;
+          profile_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          cohort_id?: string;
+          role_label?: string;
+          region?: string;
+          profile_id?: string;
+          created_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
@@ -363,3 +418,9 @@ export type UserManagerTask = Database['public']['Tables']['user_manager_tasks']
 export type Shoutout = Database['public']['Tables']['shoutouts']['Row'];
 export type WorkbookResponse = Database['public']['Tables']['workbook_responses']['Row'];
 export type ModuleComment = Database['public']['Tables']['module_comments']['Row'];
+
+export type Cohort = Database['public']['Tables']['cohorts']['Row'];
+export type CohortInsert = Database['public']['Tables']['cohorts']['Insert'];
+export type CohortLeader = Database['public']['Tables']['cohort_leaders']['Row'];
+export type CohortLeaderInsert = Database['public']['Tables']['cohort_leaders']['Insert'];
+export type CohortWithLeaders = Cohort & { cohort_leaders: (CohortLeader & { profiles: Profile })[] };

@@ -111,7 +111,8 @@ describe('User Flow Integration Tests', () => {
       // Verify sidebar navigation is present
       expect(screen.getByText('Admin Console')).toBeInTheDocument();
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
-      expect(screen.getByText('Workflow & Tasks')).toBeInTheDocument();
+      expect(screen.getByText('People')).toBeInTheDocument();
+      expect(screen.getByText('Tasks')).toBeInTheDocument();
     });
 
     it('should show ManagerDashboard for Manager user with welcome guide', () => {
@@ -196,12 +197,12 @@ describe('User Flow Integration Tests', () => {
       expect(screen.getByText('Operations Dashboard')).toBeInTheDocument();
 
       // Switch to Workflow view
-      fireEvent.click(screen.getByText('Workflow & Tasks'));
+      fireEvent.click(screen.getByText('People'));
       expect(screen.getByText('Import team members, manage active registry, and automate training.')).toBeInTheDocument();
 
       // Switch to Cohorts view
       fireEvent.click(screen.getByText('New Bees & Cohorts'));
-      expect(screen.getByText('All Regions')).toBeInTheDocument();
+      expect(screen.getByText('All Cohorts')).toBeInTheDocument();
 
       // Switch back to Dashboard view
       fireEvent.click(screen.getByText('Dashboard'));
@@ -279,7 +280,7 @@ describe('User Flow Integration Tests', () => {
       render(<App />);
 
       // Switch between multiple views
-      fireEvent.click(screen.getByText('Workflow & Tasks'));
+      fireEvent.click(screen.getByText('People'));
       fireEvent.click(screen.getByText('New Bees & Cohorts'));
       fireEvent.click(screen.getByText('Dashboard'));
 

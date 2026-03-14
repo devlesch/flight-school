@@ -5,7 +5,9 @@ import type { TrainingModule } from '../../types/database';
 const mockSingle = vi.fn();
 const mockSelect = vi.fn(() => ({ single: mockSingle }));
 const mockInsert = vi.fn(() => ({ select: mockSelect }));
-const mockFrom = vi.fn(() => ({ insert: mockInsert }));
+const mockEq = vi.fn(() => ({ select: mockSelect }));
+const mockUpdate = vi.fn(() => ({ eq: mockEq }));
+const mockFrom = vi.fn(() => ({ insert: mockInsert, update: mockUpdate }));
 
 vi.mock('../../lib/supabase', () => ({
   supabase: {
@@ -14,7 +16,7 @@ vi.mock('../../lib/supabase', () => ({
 }));
 
 // Import after mocking
-const { createModule } = await import('../../services/moduleService');
+const { createModule, updateModule } = await import('../../services/moduleService');
 
 const mockModule: TrainingModule = {
   id: 'test-uuid-123',
@@ -32,7 +34,7 @@ const mockModule: TrainingModule = {
 describe('createModule()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFrom.mockReturnValue({ insert: mockInsert });
+    mockFrom.mockReturnValue({ insert: mockInsert, update: mockUpdate });
     mockInsert.mockReturnValue({ select: mockSelect });
     mockSelect.mockReturnValue({ single: mockSingle });
   });
@@ -86,5 +88,41 @@ describe('createModule()', () => {
 
     expect(mockInsert).toHaveBeenCalledWith(input);
     expect(result?.target_role).toBeNull();
+  });
+});
+
+describe('updateModule()', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFrom.mockReturnValue({ insert: mockInsert, update: mockUpdate });
+    mockUpdate.mockReturnValue({ eq: mockEq });
+    mockEq.mockReturnValue({ select: mockSelect });
+    mockSelect.mockReturnValue({ single: mockSingle });
+  });
+
+  it('updates a record and returns the updated TrainingModule on success', async () => {
+    const updatedModule = { ...mockModule, title: 'Updated Title' };
+    mockSingle.mockResolvedValue({ data: updatedModule, error: null });
+
+    const result = await updateModule('test-uuid-123', { title: 'Updated Title' });
+
+    expect(mockFrom).toHaveBeenCalledWith('training_modules');
+    expect(mockUpdate).toHaveBeenCalledWith({ title: 'Updated Title' });
+    expect(mockEq).toHaveBeenCalledWith('id', 'test-uuid-123');
+    expect(result).toEqual(updatedModule);
+  });
+
+  it('returns null and logs an error when Supabase returns an error', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockSingle.mockResolvedValue({ data: null, error: { message: 'Update failed' } });
+
+    const result = await updateModule('test-uuid-123', { title: 'Fail' });
+
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Error updating module:',
+      'Update failed'
+    );
+    consoleSpy.mockRestore();
   });
 });
