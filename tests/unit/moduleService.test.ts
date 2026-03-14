@@ -28,6 +28,7 @@ const mockModule: TrainingModule = {
   host: null,
   sort_order: 0,
   target_role: 'MXM',
+  day_offset: 0,
   created_at: '2026-03-02T00:00:00Z',
 };
 

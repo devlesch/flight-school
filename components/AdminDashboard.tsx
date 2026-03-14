@@ -6,7 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, 
 import { Mail, Calendar, TrendingUp, CheckCircle, AlertCircle, FileText, Loader2, Wand2, UploadCloud, Video, ArrowRight, X, Users, Plus, Clock, MessageSquare, Zap, PieChart, Settings, Palette, UserCheck, Search, Send, ChevronLeft, ChevronRight, MessageCircle, Globe, AtSign, Filter, BarChart2, MousePointer2, Check, UserMinus, ArrowLeft, Slack, ClipboardCheck, Info, Target, LayoutDashboard, Star, ShieldCheck, UserCog, UserPlus, ZapOff, Activity, History, HelpCircle, FileUp, Building2, UserCircle, Save, Briefcase, RefreshCw, Edit3, BookOpen, Layers, UserPlus2, UserCheck2, HelpCircle as HelpIcon, Timer, ListTodo } from 'lucide-react';
 import { analyzeProgress, ExtractedHireData, generateManagerNotification, generateEmailDraft } from '../services/geminiService';
 import { createModule, getModules, updateModule } from '../services/moduleService';
-import { createCohort, LEADER_ROLE_TITLE_PATTERNS, upsertCohortLeader } from '../services/cohortService';
+import { createCohort, updateCohort, LEADER_ROLE_TITLE_PATTERNS, upsertCohortLeader } from '../services/cohortService';
 import { parseWorkdayExcel, importWorkdayData, ImportResult } from '../services/workdayImportService';
 import { updateProfile } from '../services/profileService';
 import confetti from 'canvas-confetti';
@@ -116,8 +116,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [newCohortName, setNewCohortName] = useState('');
   const [newCohortStartDate, setNewCohortStartDate] = useState('');
   const [newCohortEndDate, setNewCohortEndDate] = useState('');
+  const [newCohortStartingDate, setNewCohortStartingDate] = useState('');
   const [newCohortLeaders, setNewCohortLeaders] = useState<Record<string, string>>({});
   const [creatingCohort, setCreatingCohort] = useState(false);
+  const [editingCohortId, setEditingCohortId] = useState<string | null>(null);
 
   // Tasks view state
   const [allModules, setAllModules] = useState<DbTrainingModule[]>([]);
@@ -127,11 +129,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (viewMode === 'tasks') {
-      setModulesLoading(true);
-      getModules().then(data => { setAllModules(data); setModulesLoading(false); });
-    }
-  }, [viewMode]);
+    setModulesLoading(true);
+    getModules().then(data => { setAllModules(data); setModulesLoading(false); });
+  }, []);
 
   const filteredModules = useMemo(() => {
     return allModules.filter(mod => {
@@ -142,32 +142,59 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     });
   }, [allModules, taskFilters]);
 
-  const [events, setEvents] = useState<CalendarEvent[]>([
-    { 
-      id: 'evt-1', 
-      title: 'Cohort 1: Welcome Kickoff', 
-      date: '2026-01-05T10:00:00', 
-      attendees: ['All New Hires'], 
-      link: 'hangouts.google.com/meet/abc',
-      presenters: [{ name: 'Sarah Operations', confirmed: true }, { name: 'Kevin Jung', confirmed: true }]
-    },
-    { 
-      id: 'evt-2', 
-      title: 'Ops Systems Q&A', 
-      date: '2026-01-07T14:00:00', 
-      attendees: ['MxMs', 'Ops Associates'], 
-      link: 'hangouts.google.com/meet/xyz',
-      presenters: [{ name: 'Elena Supervisor', confirmed: false }]
-    },
-    { 
-      id: 'evt-3', 
-      title: 'National Ops All Hands', 
-      date: '2026-01-09T11:00:00', 
-      attendees: ['All Staff'], 
-      link: 'hangouts.google.com/meet/national',
-      presenters: [{ name: 'Sarah Operations', confirmed: true }, { name: 'Justin CEO', confirmed: false }]
-    },
-  ]);
+  const COHORT_COLORS = [
+    { bg: 'bg-[#dcfce7]', text: 'text-[#166534]', border: 'border-[#166534]' },
+    { bg: 'bg-[#dbeafe]', text: 'text-[#1e40af]', border: 'border-[#1e40af]' },
+    { bg: 'bg-[#fef9c3]', text: 'text-[#854d0e]', border: 'border-[#854d0e]' },
+    { bg: 'bg-[#fce7f3]', text: 'text-[#9d174d]', border: 'border-[#9d174d]' },
+    { bg: 'bg-[#ede9fe]', text: 'text-[#5b21b6]', border: 'border-[#5b21b6]' },
+    { bg: 'bg-[#ffedd5]', text: 'text-[#9a3412]', border: 'border-[#9a3412]' },
+  ];
+
+  const openEditCohortModal = (cohort: typeof cohorts[number]) => {
+    setEditingCohortId(cohort.id);
+    setNewCohortName(cohort.name);
+    setNewCohortStartDate(cohort.hire_start_date);
+    setNewCohortEndDate(cohort.hire_end_date);
+    setNewCohortStartingDate(cohort.starting_date || '');
+    const leaders: Record<string, string> = {};
+    cohort.cohort_leaders.forEach(l => {
+      leaders[`${l.role_label}-${l.region}`] = l.profile_id;
+    });
+    setNewCohortLeaders(leaders);
+    setShowCreateCohortModal(true);
+  };
+
+  const calendarEvents = useMemo(() => {
+    const computed: (CalendarEvent & {
+      colorIdx: number;
+      cohortName: string;
+      cohortId: string;
+      moduleData: DbTrainingModule;
+    })[] = [];
+    cohorts.forEach((cohort, idx) => {
+      if (!cohort.starting_date) return;
+      const start = new Date(cohort.starting_date + 'T00:00:00');
+      for (const mod of allModules) {
+        const taskDate = new Date(start);
+        taskDate.setDate(taskDate.getDate() + (mod.day_offset ?? 0));
+        computed.push({
+          id: `${cohort.id}-${mod.id}`,
+          title: `${cohort.name}: ${mod.title}`,
+          date: taskDate.toISOString(),
+          attendees: [mod.target_role || 'All Roles'],
+          link: mod.link || '',
+          colorIdx: idx % COHORT_COLORS.length,
+          cohortName: cohort.name,
+          cohortId: cohort.id,
+          moduleData: mod,
+        });
+      }
+    });
+    return computed;
+  }, [cohorts, allModules]);
+
+  const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<typeof calendarEvents[number] | null>(null);
 
   const isHireBehind = (h: NewHireProfile) => h.progress < 25 || h.modules.some(m => !m.completed && new Date(m.dueDate) < new Date());
 
@@ -316,7 +343,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       description: mod.description || '',
       method: mod.type as TrainingModule['type'],
       targetRole: mod.target_role || 'All Roles',
-      assignmentDay: 0,
+      assignmentDay: mod.day_offset ?? 0,
       hasWorkbook: false,
       workbookContent: '',
     });
@@ -336,6 +363,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       type: (taskCategory === 'call' ? 'LIVE_CALL' : trainingData.method) as ModuleType,
       link: link || null,
       target_role: trainingData.targetRole === 'All Roles' ? null : trainingData.targetRole,
+      day_offset: trainingData.assignmentDay,
     };
 
     const result = editingModuleId
@@ -429,14 +457,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="h-32 bg-[#F3EEE7]/10 border-r border-b border-[#013E3F]/10"></div>);
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${currentMonthDate.getFullYear()}-${String(currentMonthDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const dayEvents = events.filter(e => e.date.startsWith(dateStr));
+      const dayEvents = calendarEvents.filter(e => e.date.startsWith(dateStr));
       days.push(
         <div key={day} className="h-32 bg-white border-r border-b border-[#013E3F]/10 p-2 relative hover:bg-[#F3EEE7]/5">
           <span className="text-xs font-bold text-[#013E3F]/50 absolute top-2 left-2">{day}</span>
           <div className="mt-5 space-y-1 overflow-y-auto max-h-[100px]">
-            {dayEvents.map(event => (
-              <div key={event.id} className="text-[9px] p-1 rounded bg-[#dcfce7] text-[#166534] border-l-2 border-[#166534] truncate">{event.title}</div>
-            ))}
+            {dayEvents.map(event => {
+              const color = COHORT_COLORS[event.colorIdx];
+              return (
+                <div key={event.id} onClick={() => setSelectedCalendarEvent(event)} className={`text-[9px] p-1 rounded ${color.bg} ${color.text} border-l-2 ${color.border} truncate cursor-pointer hover:opacity-80`}>{event.title}</div>
+              );
+            })}
           </div>
         </div>
       );
@@ -450,7 +481,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const behindCount = behindEmployees.length;
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-20">
+    <div className="space-y-4 max-w-7xl mx-auto pb-20">
       <div className="border-b border-[#F3EEE7]/10 pb-6">
           <h2 className="text-3xl font-medium text-[#F3EEE7] font-serif">
             {viewMode === 'dashboard' && 'Operations Dashboard'}
@@ -986,7 +1017,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
 
       {/* NEW BEES & COHORTS VIEW */}
       {viewMode === 'cohorts' && (
-        <div className="animate-in fade-in duration-300 space-y-8">
+        <div className="animate-in fade-in duration-300 space-y-4">
            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#F3EEE7]/40">
                  <button onClick={() => { setSelectedCohort(null); setSelectedRegionName(null); setSelectedCohortManager(null); setSelectedSlotRole(null); setSelectedSlotRegion(null); }} className="hover:text-[#FDD344] transition-colors">All Cohorts</button>
@@ -1003,7 +1034,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                     <h3 className="text-3xl font-serif text-[#013E3F]">Cohort Directory</h3>
                     <p className="text-sm italic text-[#013E3F]/60 mt-4 leading-relaxed">Select a cohort to view regional performance and manager drill-downs.</p>
                   </div>
-                  <button onClick={() => setShowCreateCohortModal(true)} className="w-12 h-12 rounded-full bg-[#013E3F] text-[#FDD344] flex items-center justify-center hover:bg-[#013E3F]/80 transition-colors shadow-md" title="Add Cohort"><Plus className="w-6 h-6" /></button>
+                  <button onClick={() => { setEditingCohortId(null); setNewCohortName(''); setNewCohortStartDate(''); setNewCohortEndDate(''); setNewCohortStartingDate(''); setNewCohortLeaders({}); setShowCreateCohortModal(true); }} className="w-12 h-12 rounded-full bg-[#013E3F] text-[#FDD344] flex items-center justify-center hover:bg-[#013E3F]/80 transition-colors shadow-md" title="Add Cohort"><Plus className="w-6 h-6" /></button>
                 </div>
                 {cohortsLoading ? (
                   <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-[#013E3F]/40" /><span className="ml-3 text-sm text-[#013E3F]/40">Loading cohorts...</span></div>
@@ -1031,7 +1062,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                             </td>
                             <td className="px-8 py-5 text-xs font-bold text-[#013E3F]/60">{new Date(cohort.hire_start_date + 'T00:00:00').toLocaleDateString()} — {new Date(cohort.hire_end_date + 'T00:00:00').toLocaleDateString()}</td>
                             <td className="px-8 py-5"><span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${assignedLeaders === 12 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{assignedLeaders} / 12 assigned</span></td>
-                            <td className="px-8 py-5 text-right"><ArrowRight className="w-5 h-5 text-[#013E3F]/20 group-hover:text-[#013E3F] transition-colors inline-block" /></td>
+                            <td className="px-8 py-5 text-right flex items-center justify-end gap-2">
+                              <button onClick={(e) => { e.stopPropagation(); openEditCohortModal(cohort); }} className="p-1.5 rounded-lg hover:bg-[#013E3F]/10 transition-colors" title="Edit Cohort"><Edit3 className="w-4 h-4 text-[#013E3F]/30 hover:text-[#013E3F] transition-colors" /></button>
+                              <ArrowRight className="w-5 h-5 text-[#013E3F]/20 group-hover:text-[#013E3F] transition-colors" />
+                            </td>
                           </tr>
                         );
                       })}
@@ -1041,7 +1075,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                 )}
               </div>
            ) : !selectedCohortManager ? (
-              <div className="space-y-8">
+              <div className="space-y-4">
                 {/* Header */}
                 <div className="flex items-center justify-between">
                   <div>
@@ -1265,7 +1299,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                              const progress = ((profile.id.charCodeAt(0) * 7 + profile.id.charCodeAt(1) * 13) % 80) + 10;
                              const avatarUrl = profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=013E3F&color=F3EEE7`;
                              return (
-                               <div key={profile.id} onClick={() => { setSelectedHireForDrilldown({ id: profile.id, name: profile.name, role: profile.role as UserRole, avatar: avatarUrl, title: profile.title || '—', email: profile.email, managerId: profile.manager_id || '', startDate: profile.start_date || new Date().toISOString(), progress, department: profile.department || '', modules: [] }); setDrilldownTab('overview'); }} className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 hover:border-[#FDD344] transition-all group cursor-pointer shadow-sm relative overflow-hidden">
+                               <div key={profile.id} onClick={() => {
+                                const cohortStart = selectedCohortData?.starting_date;
+                                const userModules = allModules
+                                  .filter(mod => !mod.target_role || mod.target_role === profile.standardized_role)
+                                  .map(mod => {
+                                    const dueDate = cohortStart
+                                      ? new Date(new Date(cohortStart + 'T00:00:00').getTime() + (mod.day_offset ?? 0) * 86400000).toISOString().split('T')[0]
+                                      : new Date().toISOString().split('T')[0];
+                                    return {
+                                      id: mod.id,
+                                      title: mod.title,
+                                      description: mod.description || '',
+                                      type: mod.type as TrainingModule['type'],
+                                      duration: mod.duration || '',
+                                      completed: false,
+                                      dueDate,
+                                      link: mod.link || undefined,
+                                      host: mod.host || undefined,
+                                    };
+                                  });
+                                setSelectedHireForDrilldown({ id: profile.id, name: profile.name, role: profile.role as UserRole, avatar: avatarUrl, title: profile.title || '—', email: profile.email, managerId: profile.manager_id || '', startDate: profile.start_date || new Date().toISOString(), progress, department: profile.department || '', modules: userModules }); setDrilldownTab('overview'); }} className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 hover:border-[#FDD344] transition-all group cursor-pointer shadow-sm relative overflow-hidden">
                                   <div className="flex items-center gap-4 mb-4"><img src={avatarUrl} className="w-12 h-12 rounded-full border border-[#013E3F]/10" /><div><h4 className="font-bold text-[#013E3F] text-lg leading-tight group-hover:text-[#FDD344] transition-colors">{profile.name}</h4><p className="text-[10px] uppercase font-bold text-[#013E3F]/40 tracking-wider">{profile.title || '—'}</p></div></div><div className="w-full bg-[#F3EEE7] h-2 rounded-full overflow-hidden mb-3"><div className="h-full bg-[#013E3F] transition-all duration-500" style={{ width: `${progress}%` }} /></div><div className="flex justify-between items-center"><div className="flex flex-col"><span className="text-[10px] font-bold uppercase opacity-30">Completion</span><span className="font-serif font-bold text-[#013E3F]">{progress}%</span></div><button className="text-[9px] font-bold uppercase tracking-widest text-[#013E3F]/40 group-hover:text-[#013E3F] flex items-center gap-1">View Profile <ArrowRight className="w-3 h-3" /></button></div><div className="absolute right-0 top-0 w-24 h-24 bg-[#FDD344]/5 rounded-full -translate-y-12 translate-x-12 group-hover:scale-150 transition-transform duration-500"></div>
                                </div>
                              );
@@ -1324,15 +1378,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[#013E3F]/80 backdrop-blur-md">
           <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
             <div className="p-8 bg-[#F3EEE7] border-b border-[#013E3F]/10 flex justify-between items-center">
-              <h3 className="font-serif text-3xl text-[#013E3F]">Create New Cohort</h3>
-              <button onClick={() => setShowCreateCohortModal(false)} className="p-3 hover:bg-white rounded-full transition-colors"><X className="w-6 h-6 text-[#013E3F]" /></button>
+              <h3 className="font-serif text-3xl text-[#013E3F]">{editingCohortId ? 'Edit Cohort' : 'Create New Cohort'}</h3>
+              <button onClick={() => { setShowCreateCohortModal(false); setEditingCohortId(null); }} className="p-3 hover:bg-white rounded-full transition-colors"><X className="w-6 h-6 text-[#013E3F]" /></button>
             </div>
             <div className="p-8 overflow-y-auto space-y-6">
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-[#013E3F]/40 mb-2">Cohort Name</label>
                 <input type="text" value={newCohortName} onChange={e => setNewCohortName(e.target.value)} placeholder="e.g. Cohort Jan 2026" className="w-full border border-[#013E3F]/10 rounded-xl px-4 py-3 text-sm text-[#013E3F] focus:outline-none focus:ring-2 focus:ring-[#013E3F]/20" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest text-[#013E3F]/40 mb-2">Hire Start Date</label>
                   <input type="date" value={newCohortStartDate} onChange={e => setNewCohortStartDate(e.target.value)} className="w-full border border-[#013E3F]/10 rounded-xl px-4 py-3 text-sm text-[#013E3F] focus:outline-none focus:ring-2 focus:ring-[#013E3F]/20" />
@@ -1340,6 +1394,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest text-[#013E3F]/40 mb-2">Hire End Date</label>
                   <input type="date" value={newCohortEndDate} onChange={e => setNewCohortEndDate(e.target.value)} className="w-full border border-[#013E3F]/10 rounded-xl px-4 py-3 text-sm text-[#013E3F] focus:outline-none focus:ring-2 focus:ring-[#013E3F]/20" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-[#013E3F]/40 mb-2">Training Starting Date</label>
+                  <input type="date" value={newCohortStartingDate} onChange={e => setNewCohortStartingDate(e.target.value)} className="w-full border border-[#013E3F]/10 rounded-xl px-4 py-3 text-sm text-[#013E3F] focus:outline-none focus:ring-2 focus:ring-[#013E3F]/20" />
                 </div>
               </div>
               <div>
@@ -1385,7 +1443,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
               </div>
             </div>
             <div className="p-6 border-t border-[#013E3F]/10 flex justify-end gap-3">
-              <button onClick={() => setShowCreateCohortModal(false)} className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-[#013E3F]/60 hover:text-[#013E3F] transition-colors">Cancel</button>
+              <button onClick={() => { setShowCreateCohortModal(false); setEditingCohortId(null); }} className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-[#013E3F]/60 hover:text-[#013E3F] transition-colors">Cancel</button>
               <button
                 disabled={creatingCohort || !newCohortName || !newCohortStartDate || !newCohortEndDate}
                 onClick={async () => {
@@ -1396,16 +1454,37 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                       const [role_label, region] = key.split('-');
                       return { role_label, region, profile_id: profileId };
                     });
-                  const result = await createCohort(
-                    { name: newCohortName, hire_start_date: newCohortStartDate, hire_end_date: newCohortEndDate },
-                    leaders
-                  );
+
+                  let success = false;
+                  if (editingCohortId) {
+                    const result = await updateCohort(editingCohortId, {
+                      name: newCohortName,
+                      hire_start_date: newCohortStartDate,
+                      hire_end_date: newCohortEndDate,
+                      starting_date: newCohortStartingDate || null,
+                    });
+                    if (result) {
+                      for (const l of leaders) {
+                        await upsertCohortLeader(editingCohortId, l.role_label, l.region, l.profile_id);
+                      }
+                      success = true;
+                    }
+                  } else {
+                    const result = await createCohort(
+                      { name: newCohortName, hire_start_date: newCohortStartDate, hire_end_date: newCohortEndDate, starting_date: newCohortStartingDate || null },
+                      leaders
+                    );
+                    success = !!result;
+                  }
+
                   setCreatingCohort(false);
-                  if (result) {
+                  if (success) {
                     setShowCreateCohortModal(false);
+                    setEditingCohortId(null);
                     setNewCohortName('');
                     setNewCohortStartDate('');
                     setNewCohortEndDate('');
+                    setNewCohortStartingDate('');
                     setNewCohortLeaders({});
                     refetchCohorts();
                   }
@@ -1413,7 +1492,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                 className="px-8 py-3 bg-[#013E3F] text-white text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#013E3F]/80 transition-colors disabled:opacity-40 flex items-center gap-2"
               >
                 {creatingCohort && <Loader2 className="w-4 h-4 animate-spin" />}
-                Create Cohort
+                {editingCohortId ? 'Save Changes' : 'Create Cohort'}
               </button>
             </div>
           </div>
@@ -1587,24 +1666,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       {/* AGENDA VIEW */}
       {viewMode === 'agenda' && (
         <div className="space-y-8 animate-in fade-in duration-300">
-           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                 <button 
-                    disabled={isSyncingCalendar}
-                    onClick={handleSyncCalendar}
-                    className="bg-[#012d2e] border border-[#F3EEE7]/10 text-[#F3EEE7] px-6 py-2.5 rounded-xl font-bold uppercase text-xs flex items-center gap-2 hover:bg-[#FDD344] hover:text-[#013E3F] transition-all disabled:opacity-50"
-                 >
-                    {isSyncingCalendar ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Sync Unit Ops Calendar
-                 </button>
-                 {lastSyncedAt && (
-                    <span className="text-[10px] font-bold text-[#F3EEE7]/40 uppercase tracking-widest flex items-center gap-1">
-                       <CheckCircle className="w-3 h-3" /> Last Synced: {lastSyncedAt}
-                    </span>
-                 )}
-              </div>
-           </div>
-
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Calendar Column */}
               <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-[#013E3F]/10 overflow-hidden">
@@ -1628,33 +1689,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                     <UserCheck2 className="w-6 h-6 text-[#013E3F]/20" />
                  </div>
                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
-                    {events.map(event => (
-                       <div key={event.id} className="space-y-3">
+                    {calendarEvents.length === 0 ? (
+                       <p className="text-sm text-[#013E3F]/40 text-center py-8">No training events yet. Create cohorts with a starting date and add tasks with day offsets to populate the calendar.</p>
+                    ) : calendarEvents.slice(0, 10).map(event => (
+                       <div key={event.id} className="space-y-3 cursor-pointer hover:bg-[#F3EEE7]/30 rounded-lg p-2 -m-2 transition-colors" onClick={() => setSelectedCalendarEvent(event)}>
                           <div className="flex items-start justify-between">
                              <h4 className="font-bold text-[#013E3F] text-sm leading-tight max-w-[70%]">{event.title}</h4>
                              <span className="text-[9px] font-bold uppercase bg-[#013E3F]/5 text-[#013E3F]/40 px-2 py-0.5 rounded">
                                 {new Date(event.date).toLocaleDateString()}
                              </span>
                           </div>
-                          <div className="space-y-2">
-                             {event.presenters?.map((presenter, pIdx) => (
-                                <div key={pIdx} className="flex items-center justify-between p-3 rounded-xl bg-[#F9F7F5] border border-[#013E3F]/5">
-                                   <div className="flex items-center gap-3">
-                                      <div className={`w-2 h-2 rounded-full ${presenter.confirmed ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-amber-400 animate-pulse'}`}></div>
-                                      <span className="text-xs font-medium text-[#013E3F]">{presenter.name}</span>
-                                   </div>
-                                   {presenter.confirmed ? (
-                                      <span className="text-[9px] font-bold text-green-600 uppercase flex items-center gap-1 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
-                                         <CheckCircle className="w-3 h-3" /> Confirmed
-                                      </span>
-                                   ) : (
-                                      <span className="text-[9px] font-bold text-amber-600 uppercase flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                                         <Clock className="w-3 h-3" /> Pending Hold
-                                      </span>
-                                   )}
-                                </div>
-                             ))}
-                          </div>
+                          <div className="text-[10px] text-[#013E3F]/50">{event.attendees.join(', ')}</div>
                        </div>
                     ))}
                  </div>
@@ -1665,6 +1710,102 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
            </div>
         </div>
       )}
+
+      {/* Calendar Event Detail Modal */}
+      {selectedCalendarEvent && (() => {
+        const ev = selectedCalendarEvent;
+        const mod = ev.moduleData;
+        const color = COHORT_COLORS[ev.colorIdx];
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center" onClick={() => setSelectedCalendarEvent(null)}>
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className={`p-6 ${color.bg} border-b border-[#013E3F]/10`}>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0 pr-4">
+                    <h3 className={`font-serif text-xl font-bold ${color.text}`}>{mod.title}</h3>
+                    <p className="text-sm text-[#013E3F]/60 mt-1">{ev.cohortName}</p>
+                  </div>
+                  <button onClick={() => setSelectedCalendarEvent(null)} className="p-1 rounded-lg hover:bg-black/10 transition-colors">
+                    <X className="w-5 h-5 text-[#013E3F]/60" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mt-3">
+                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${mod.type === 'call' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {mod.type === 'call' ? 'Call' : 'Task'}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#013E3F]/10 text-[#013E3F]/60">
+                    Day {mod.day_offset ?? 0} of training
+                  </span>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 space-y-4">
+                {mod.description && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#013E3F]/40 tracking-wider mb-1">Description</p>
+                    <p className="text-sm text-[#013E3F]/80">{mod.description}</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#013E3F]/40 tracking-wider mb-1">Scheduled Date</p>
+                    <p className="text-sm text-[#013E3F] font-medium flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5" />
+                      {new Date(ev.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#013E3F]/40 tracking-wider mb-1">Target Role</p>
+                    <p className="text-sm text-[#013E3F] font-medium flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5" />
+                      {mod.target_role || 'All Roles'}
+                    </p>
+                  </div>
+                  {mod.duration && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase text-[#013E3F]/40 tracking-wider mb-1">Duration</p>
+                      <p className="text-sm text-[#013E3F] font-medium flex items-center gap-1.5">
+                        <Timer className="w-3.5 h-3.5" />
+                        {mod.duration}
+                      </p>
+                    </div>
+                  )}
+                  {mod.host && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase text-[#013E3F]/40 tracking-wider mb-1">Host</p>
+                      <p className="text-sm text-[#013E3F] font-medium flex items-center gap-1.5">
+                        <UserCircle className="w-3.5 h-3.5" />
+                        {mod.host}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {mod.link && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#013E3F]/40 tracking-wider mb-1">Link</p>
+                    <a href={mod.link} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline break-all flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 flex-shrink-0" />
+                      {mod.link}
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 bg-[#F3EEE7]/30 border-t border-[#013E3F]/10 flex justify-end">
+                <button onClick={() => setSelectedCalendarEvent(null)} className="px-4 py-2 text-sm font-bold text-[#013E3F]/60 hover:text-[#013E3F] transition-colors">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* COMMUNICATIONS VIEW */}
       {viewMode === 'communications' && (

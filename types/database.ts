@@ -86,6 +86,7 @@ export interface Database {
           host: string | null;
           sort_order: number;
           target_role: string | null;
+          day_offset: number;
           created_at: string;
         };
         Insert: {
@@ -98,6 +99,7 @@ export interface Database {
           host?: string | null;
           sort_order?: number;
           target_role?: string | null;
+          day_offset?: number;
           created_at?: string;
         };
         Update: {
@@ -110,6 +112,7 @@ export interface Database {
           host?: string | null;
           sort_order?: number;
           target_role?: string | null;
+          day_offset?: number;
           created_at?: string;
         };
       };
@@ -341,6 +344,7 @@ export interface Database {
           name: string;
           hire_start_date: string;
           hire_end_date: string;
+          starting_date: string | null;
           created_at: string;
         };
         Insert: {
@@ -348,6 +352,7 @@ export interface Database {
           name: string;
           hire_start_date: string;
           hire_end_date: string;
+          starting_date?: string | null;
           created_at?: string;
         };
         Update: {
@@ -355,6 +360,7 @@ export interface Database {
           name?: string;
           hire_start_date?: string;
           hire_end_date?: string;
+          starting_date?: string | null;
           created_at?: string;
         };
       };
@@ -421,6 +427,7 @@ export type ModuleComment = Database['public']['Tables']['module_comments']['Row
 
 export type Cohort = Database['public']['Tables']['cohorts']['Row'];
 export type CohortInsert = Database['public']['Tables']['cohorts']['Insert'];
+export type CohortUpdate = Database['public']['Tables']['cohorts']['Update'];
 export type CohortLeader = Database['public']['Tables']['cohort_leaders']['Row'];
 export type CohortLeaderInsert = Database['public']['Tables']['cohort_leaders']['Insert'];
 export type CohortWithLeaders = Cohort & { cohort_leaders: (CohortLeader & { profiles: Profile })[] };

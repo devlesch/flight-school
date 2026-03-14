@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Cohort, CohortInsert, CohortLeaderInsert, CohortWithLeaders } from '../types/database';
+import type { Cohort, CohortInsert, CohortUpdate, CohortLeaderInsert, CohortWithLeaders } from '../types/database';
 
 /**
  * Training leader dropdown filters — shows the level ABOVE the trainee role:
@@ -105,6 +105,29 @@ export async function upsertCohortLeader(
   }
 
   return true;
+}
+
+/**
+ * Update a cohort's fields by ID
+ */
+export async function updateCohort(
+  id: string,
+  data: CohortUpdate
+): Promise<Cohort | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: updated, error } = await (supabase as any)
+    .from('cohorts')
+    .update(data)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('updateCohort error:', error);
+    return null;
+  }
+
+  return updated as Cohort;
 }
 
 /**
