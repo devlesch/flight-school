@@ -267,20 +267,7 @@ const App: React.FC = () => {
            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-[#F3EEE7]"><Menu /></button>
         </header>
 
-        <div className="hidden lg:flex items-center justify-between px-10 py-6 bg-[#013E3F]">
-          <h1 className="text-2xl font-serif font-medium text-[#F3EEE7]">
-            {currentView === UserRole.ADMIN && 'Operations Admin Portal'}
-            {currentView === UserRole.MANAGER && 'Manager Overview'}
-            {currentView === UserRole.NEW_HIRE && 'Onboarding Journey'}
-          </h1>
-          <div className="flex items-center gap-4">
-             <span className="text-[10px] font-bold text-[#FDD344] uppercase tracking-widest bg-[#FDD344]/10 px-3 py-1 rounded-full border border-[#FDD344]/20 flex items-center gap-2">
-               <div className="w-2 h-2 rounded-full bg-[#FDD344] animate-pulse"></div> {currentUser.email}
-             </span>
-          </div>
-        </div>
-
-        <main className="flex-1 overflow-y-auto p-4 lg:px-10 lg:pb-10 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto p-4 lg:px-10 lg:pt-10 lg:pb-10 custom-scrollbar">
           {renderDashboard()}
         </main>
       </div>

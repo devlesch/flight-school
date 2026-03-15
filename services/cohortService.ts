@@ -2,17 +2,17 @@ import { supabase } from '../lib/supabase';
 import type { Cohort, CohortInsert, CohortUpdate, CohortLeaderInsert, CohortWithLeaders } from '../types/database';
 
 /**
- * Training leader dropdown filters — shows the level ABOVE the trainee role:
- *   MxA trainees → led by MxM
- *   MxM trainees → led by AGM or GM
- *   AGM trainees → led by RD
- *   GM trainees  → led by RD
+ * Maps each cohort leader slot to the standardized_role values eligible to lead it:
+ *   MxA → MxM
+ *   MxM → AGM or GM
+ *   AGM → GM or RD
+ *   GM  → RD
  */
-export const LEADER_ROLE_TITLE_PATTERNS: Record<string, (title: string) => boolean> = {
-  MxA: (title) => /manager/i.test(title) && !/general manager/i.test(title) && !/assistant general manager/i.test(title),
-  MxM: (title) => /assistant general manager/i.test(title) || (/general manager/i.test(title) && !/assistant/i.test(title)),
-  AGM: (title) => /regional director/i.test(title) || /\bRD\b/.test(title),
-  GM: (title) => /regional director/i.test(title) || /\bRD\b/.test(title),
+export const LEADER_ROLE_MAP: Record<string, string[]> = {
+  MxA: ['MxM'],
+  MxM: ['AGM', 'GM'],
+  AGM: ['GM', 'RD'],
+  GM: ['RD'],
 };
 
 /**
