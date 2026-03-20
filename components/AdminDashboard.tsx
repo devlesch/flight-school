@@ -6,14 +6,17 @@ import { NEW_HIRES, MANAGERS, MOCK_TRAINING_MODULES, MANAGER_ONBOARDING_TASKS } 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, LabelList, PieChart as RePieChart, Pie, Tooltip, LineChart, Line, AreaChart, Area } from 'recharts';
 import { Mail, Calendar, TrendingUp, CheckCircle, AlertCircle, FileText, Loader2, Wand2, UploadCloud, Video, ArrowRight, X, Users, Plus, Clock, MessageSquare, Zap, PieChart, Settings, Palette, UserCheck, Search, Send, ChevronLeft, ChevronRight, MessageCircle, Globe, AtSign, Filter, BarChart2, MousePointer2, Check, UserMinus, ArrowLeft, Slack, ClipboardCheck, Info, Target, LayoutDashboard, Star, ShieldCheck, UserCog, UserPlus, ZapOff, Activity, History, HelpCircle, FileUp, Building2, UserCircle, Save, Briefcase, RefreshCw, Edit3, BookOpen, Layers, UserPlus2, UserCheck2, HelpCircle as HelpIcon, Timer, ListTodo } from 'lucide-react';
 import { analyzeProgress, ExtractedHireData, generateManagerNotification, generateEmailDraft } from '../services/geminiService';
-import { createModule, getModules, updateModule } from '../services/moduleService';
+import { createModule, getModules, updateModule, getUserModulesBatch } from '../services/moduleService';
+import type { UserModule as DbUserModule } from '../types/database';
 import { createCohort, updateCohort, LEADER_ROLE_MAP, upsertCohortLeader } from '../services/cohortService';
 import { parseWorkdayExcel, importWorkdayData, ImportResult } from '../services/workdayImportService';
 import { updateProfile } from '../services/profileService';
 import { sendSlackDM } from '../services/slackService';
+import { useToast } from './Toast';
 import confetti from 'canvas-confetti';
 import { useAllUsers } from '../hooks/useTeam';
 import { useCohorts } from '../hooks/useCohorts';
+import { supabase } from '../lib/supabase';
 
 export type AdminViewMode = 'dashboard' | 'workflow' | 'tasks' | 'cohorts' | 'agenda' | 'communications' | 'engagement' | 'settings';
 
@@ -37,7 +40,23 @@ const QUESTION_LABELS: Record<string, string> = {
   'empowered_least': 'Least empowered member behavior',
 };
 
+function getWeekBoundaries(startDateStr: string): { label: string; start: Date; end: Date }[] {
+  const start = new Date(startDateStr + 'T00:00:00');
+  const now = new Date();
+  const weeks: { label: string; start: Date; end: Date }[] = [];
+  let weekStart = new Date(start);
+  let weekNum = 1;
+  while (weekStart < now) {
+    const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+    weeks.push({ label: `Week ${weekNum}`, start: new Date(weekStart), end: weekEnd > now ? now : weekEnd });
+    weekStart = weekEnd;
+    weekNum++;
+  }
+  return weeks;
+}
+
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setViewMode }) => {
+  const toast = useToast();
   // Supabase hook for all users (admin view)
   const { users: supabaseUsers, loading: usersLoading, refetch: refetchUsers } = useAllUsers();
   // Cohorts hook
@@ -87,9 +106,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [taskSuccess, setTaskSuccess] = useState(false);
   const [messageTarget, setMessageTarget] = useState<'managers' | 'newhires'>('newhires');
   const [messageSearch, setMessageSearch] = useState('');
+
+  const filteredCommsUsers = useMemo(() => {
+    let filtered = allUsers.filter(p =>
+      messageTarget === 'managers'
+        ? p.role === 'Manager' || p.role === 'Admin'
+        : p.role === 'New Hire'
+    );
+    if (messageSearch.trim()) {
+      const q = messageSearch.toLowerCase();
+      filtered = filtered.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.email.toLowerCase().includes(q) ||
+        (p.title || '').toLowerCase().includes(q)
+      );
+    }
+    return filtered;
+  }, [allUsers, messageTarget, messageSearch]);
+
   const [commsDraft, setCommsDraft] = useState('');
   const [activeCommsAction, setActiveCommsAction] = useState<'email' | 'slack' | 'survey' | null>(null);
-  const [selectedUserForComms, setSelectedUserForComms] = useState<User | null>(null);
+  const [selectedUserForComms, setSelectedUserForComms] = useState<{ id: string; name: string; email: string } | null>(null);
   const [sendingComms, setSendingComms] = useState(false);
   const [showEnrolledDrilldown, setShowEnrolledDrilldown] = useState(false);
   const [enrolledFilter, setEnrolledFilter] = useState<'summary' | 'onTrack' | 'behind'>('summary');
@@ -249,27 +286,74 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     });
   }, [allUsers, selectedSlotRole, selectedSlotRegion, selectedCohortData]);
 
-  const getManagerStats = (managerId: string) => {
-    const hires = NEW_HIRES.filter(h => h.managerId === managerId);
-    if (hires.length === 0) return { avgProgress: 0, behind: 0, onTrack: 0, followUps: 0, responseTime: 'N/A', loginFrequency: '0x/week' };
-    const avgProgress = Math.round(hires.reduce((acc, h) => acc + h.progress, 0) / hires.length);
-    const behind = hires.filter(isHireBehind).length;
-    const hash = managerId.length;
-    return { avgProgress, behind, onTrack: hires.length - behind, followUps: (hash * 3) % 25, responseTime: `< ${(hash % 12) + 1}h`, loginFrequency: `${(hash % 5) + 2}.2x/week` };
-  };
+  const [userProgressMap, setUserProgressMap] = useState<Record<string, DbUserModule[]>>({});
 
-  // Generate Mock History for Charts
-  const getHistoricalData = (managerId: string) => {
-    const stats = getManagerStats(managerId);
-    const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-    return weeks.map((w, i) => ({
-      name: w,
-      avgProgress: Math.max(0, stats.avgProgress - (15 * (3 - i))),
-      interactions: Math.max(2, stats.followUps - (2 * (3 - i))),
-      responseTime: Math.min(24, (managerId.length % 12) + (3 - i) * 2),
-      logins: Math.max(1, (managerId.length % 5) + i),
-    }));
-  };
+  useEffect(() => {
+    if (slotMembers.length === 0) { setUserProgressMap({}); return; }
+    const ids = slotMembers.map(u => u.id);
+    getUserModulesBatch(ids).then(rows => {
+      const map: Record<string, DbUserModule[]> = {};
+      for (const row of rows) {
+        if (!map[row.user_id]) map[row.user_id] = [];
+        map[row.user_id].push(row);
+      }
+      setUserProgressMap(map);
+    });
+  }, [slotMembers]);
+
+  const [loginCount, setLoginCount] = useState(0);
+
+  useEffect(() => {
+    if (slotMembers.length === 0) { setLoginCount(0); return; }
+    const ids = slotMembers.map(u => u.id);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    supabase
+      .from('session_logs')
+      .select('id', { count: 'exact', head: true })
+      .in('user_id', ids)
+      .gte('logged_in_at', sevenDaysAgo)
+      .then(({ count }) => setLoginCount(count ?? 0));
+  }, [slotMembers]);
+
+  const [sessionLogs, setSessionLogs] = useState<{ user_id: string; logged_in_at: string }[]>([]);
+
+  useEffect(() => {
+    if (slotMembers.length === 0 || !selectedCohortData?.starting_date) { setSessionLogs([]); return; }
+    const ids = slotMembers.map(u => u.id);
+    supabase
+      .from('session_logs')
+      .select('user_id, logged_in_at')
+      .in('user_id', ids)
+      .gte('logged_in_at', selectedCohortData.starting_date)
+      .order('logged_in_at', { ascending: true })
+      .then(({ data }) => setSessionLogs(data ?? []));
+  }, [slotMembers, selectedCohortData]);
+
+  const avgProgressChartData = useMemo(() => {
+    if (!selectedCohortData?.starting_date || slotMembers.length === 0) return [];
+    const weeks = getWeekBoundaries(selectedCohortData.starting_date);
+    return weeks.map(week => {
+      const totalPct = slotMembers.reduce((sum, member) => {
+        const modules = userProgressMap[member.id] || [];
+        if (modules.length === 0) return sum;
+        const completed = modules.filter(m => m.completed_at && new Date(m.completed_at) <= week.end).length;
+        return sum + Math.round((completed / modules.length) * 100);
+      }, 0);
+      return { name: week.label, avgProgress: slotMembers.length > 0 ? Math.round(totalPct / slotMembers.length) : 0 };
+    });
+  }, [selectedCohortData, slotMembers, userProgressMap]);
+
+  const loginsChartData = useMemo(() => {
+    if (!selectedCohortData?.starting_date || slotMembers.length === 0) return [];
+    const weeks = getWeekBoundaries(selectedCohortData.starting_date);
+    return weeks.map(week => {
+      const count = sessionLogs.filter(log => {
+        const d = new Date(log.logged_in_at);
+        return d >= week.start && d < week.end;
+      }).length;
+      return { name: week.label, logins: count };
+    });
+  }, [selectedCohortData, slotMembers, sessionLogs]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
@@ -322,7 +406,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       managerTasks: MANAGER_ONBOARDING_TASKS.map(t => ({ ...t, completed: false })),
     };
     NEW_HIRES.push(newHireObj);
-    alert(`Success: ${newHireObj.name} created.`);
+    toast.success(`Success: ${newHireObj.name} created.`);
     setManualHire({ firstName: '', lastName: '', email: '', managerName: '', managerEmail: '', startDate: '', location: '', role: '', hasDirectReports: false });
   };
 
@@ -345,7 +429,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       await refetchUsers();
       setEditingHireId(null);
     } else {
-      alert('Failed to save changes. Please try again.');
+      toast.error('Failed to save changes. Please try again.');
     }
   };
 
@@ -426,11 +510,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
         origin: { y: 0.2 },
         colors: ['#FDD344']
       });
-      alert('Unit Ops-Comms Calendar Synced Successfully!');
+      toast.success('Unit Ops-Comms Calendar Synced Successfully!');
     }, 1800);
   };
 
-  const handleInitiateComms = async (targetUser: User, type: 'email' | 'slack' | 'survey') => {
+  const handleInitiateComms = async (
+    targetUser: { id: string; name: string; email: string },
+    type: 'email' | 'slack' | 'survey'
+  ) => {
     setSelectedUserForComms(targetUser);
     setActiveCommsAction(type);
     setSendingComms(true);
@@ -443,11 +530,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     }
 
     try {
-      const hireProfile = NEW_HIRES.find(h => h.id === targetUser.id);
-      const progress = hireProfile?.progress || 0;
-      const overdueItems = hireProfile?.modules
-        .filter(m => !m.completed && new Date(m.dueDate) < new Date())
-        .map(m => m.title) || [];
+      const progress = 0;
+      const overdueItems: string[] = [];
 
       const draft = await generateEmailDraft(
         targetUser.name,
@@ -1197,67 +1281,91 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
               </div>
            ) : (
               <div className="space-y-8 animate-in slide-in-from-bottom-4">
-                 <div className="bg-[#013E3F] text-[#F3EEE7] p-8 rounded-2xl border border-[#F3EEE7]/10 flex flex-col md:flex-row md:items-center justify-between gap-8 relative overflow-hidden">
-                    <div className="flex items-center gap-8 z-10">
-                      <img src={selectedCohortManager.avatar} className="w-24 h-24 rounded-full border-4 border-[#FDD344]" />
-                      <div>
-                         <button onClick={() => { setSelectedCohortManager(null); setSelectedSlotRole(null); setSelectedSlotRegion(null); }} className="text-xs font-bold uppercase text-[#FDD344] mb-2 flex items-center gap-2"><ArrowLeft className="w-4 h-4" /> Back to {selectedSlotRegion} Region</button>
-                         <h3 className="font-serif text-4xl">{selectedSlotRole} Leader</h3>
-                         <div className="flex items-center gap-3 mt-2">
-                           <img src={selectedCohortManager.avatar} className="w-8 h-8 rounded-full border-2 border-[#FDD344]" alt="" />
-                           <span className="text-sm font-bold">{selectedCohortManager.name}</span>
-                           <select
-                             className="bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-xs text-[#F3EEE7] focus:outline-none"
-                             value={selectedCohortManager.id}
-                             onChange={async (e) => {
-                               const newProfileId = e.target.value;
-                               if (!newProfileId || !selectedCohort || !selectedSlotRole || !selectedSlotRegion) return;
-                               await upsertCohortLeader(selectedCohort, selectedSlotRole, selectedSlotRegion, newProfileId);
-                               await refetchCohorts();
-                               const newProfile = allUsers.find(u => u.id === newProfileId);
-                               if (newProfile) {
-                                 setSelectedCohortManager({
-                                   id: newProfile.id,
-                                   name: newProfile.name,
-                                   role: UserRole.MANAGER,
-                                   avatar: newProfile.avatar || '/default-avatar.png',
-                                   title: newProfile.title || '',
-                                   email: newProfile.email,
-                                   region: newProfile.region || selectedSlotRegion,
-                                 });
-                               }
-                             }}
-                           >
-                             {(() => {
-                               const allowedRoles = selectedSlotRole ? LEADER_ROLE_MAP[selectedSlotRole] || [] : [];
-                               const candidates = allUsers.filter(u => allowedRoles.includes(u.standardized_role || '') && u.region === selectedSlotRegion);
-                               return candidates.map(u => (
-                                 <option key={u.id} value={u.id} style={{ color: '#013E3F' }}>{u.name}</option>
-                               ));
-                             })()}
-                           </select>
-                         </div>
-                         <p className="text-xs font-bold opacity-50 uppercase tracking-widest mt-1">{selectedSlotRegion} Region</p>
-                      </div>
-                    </div>
-                    
-                    {/* Mode Toggle */}
-                    <div className="z-10 flex bg-white/10 p-1 rounded-xl border border-white/10">
-                      <button 
-                        onClick={() => setManagerMetricMode('snapshot')}
-                        className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${managerMetricMode === 'snapshot' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}
-                      >
-                        <LayoutDashboard className="w-4 h-4" /> Snapshot
-                      </button>
-                      <button 
-                        onClick={() => setManagerMetricMode('history')}
-                        className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${managerMetricMode === 'history' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}
-                      >
-                        <History className="w-4 h-4" /> History
-                      </button>
-                    </div>
+                 <div className="bg-[#013E3F] text-[#F3EEE7] px-8 py-6 rounded-2xl border border-[#F3EEE7]/10 relative overflow-hidden">
+                   <div className="flex flex-wrap items-center justify-between gap-6 z-10 relative">
+                     {/* Left: Back + Identity */}
+                     <div className="flex items-center gap-4">
+                       <button
+                         onClick={() => { setSelectedCohortManager(null); setSelectedSlotRole(null); setSelectedSlotRegion(null); }}
+                         className="text-[#F3EEE7]/40 hover:text-[#FDD344] transition-colors shrink-0"
+                         title="Back"
+                       >
+                         <ArrowLeft className="w-5 h-5" />
+                       </button>
+                       <img
+                         src={selectedCohortManager.avatar}
+                         alt={selectedCohortManager.name}
+                         className="w-14 h-14 rounded-full border-2 border-[#FDD344] shrink-0"
+                       />
+                       <div>
+                         <p className="text-[10px] font-bold uppercase tracking-widest text-[#F3EEE7]/40 mb-0.5">
+                           {selectedSlotRole} Leader &middot; {selectedSlotRegion} Region
+                         </p>
+                         <h3 className="font-serif text-2xl leading-tight">{selectedCohortManager.name}</h3>
+                       </div>
+                     </div>
 
-                    <div className="absolute right-0 top-0 w-64 h-full bg-[#FDD344]/5 skew-x-[-15deg] translate-x-20"></div>
+                     {/* Center: Mode Toggle */}
+                     <div className="flex bg-white/10 p-1 rounded-xl border border-white/10">
+                       <button
+                         onClick={() => setManagerMetricMode('snapshot')}
+                         className={`px-5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${
+                           managerMetricMode === 'snapshot' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'
+                         }`}
+                       >
+                         <LayoutDashboard className="w-3.5 h-3.5" /> Snapshot
+                       </button>
+                       <button
+                         onClick={() => setManagerMetricMode('history')}
+                         className={`px-5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${
+                           managerMetricMode === 'history' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'
+                         }`}
+                       >
+                         <History className="w-3.5 h-3.5" /> History
+                       </button>
+                     </div>
+
+                     {/* Right: Reassign Action */}
+                     <div className="flex items-center gap-3 shrink-0">
+                       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#F3EEE7]/30">
+                         <RefreshCw className="w-3.5 h-3.5" />
+                         Reassign
+                       </div>
+                       <select
+                         className="bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-xs text-[#F3EEE7] focus:outline-none focus:border-[#FDD344]/50 cursor-pointer"
+                         value={selectedCohortManager.id}
+                         onChange={async (e) => {
+                           const newProfileId = e.target.value;
+                           if (!newProfileId || !selectedCohort || !selectedSlotRole || !selectedSlotRegion) return;
+                           await upsertCohortLeader(selectedCohort, selectedSlotRole, selectedSlotRegion, newProfileId);
+                           await refetchCohorts();
+                           const newProfile = allUsers.find(u => u.id === newProfileId);
+                           if (newProfile) {
+                             setSelectedCohortManager({
+                               id: newProfile.id,
+                               name: newProfile.name,
+                               role: UserRole.MANAGER,
+                               avatar: newProfile.avatar || '/default-avatar.png',
+                               title: newProfile.title || '',
+                               email: newProfile.email,
+                               region: newProfile.region || selectedSlotRegion,
+                             });
+                           }
+                         }}
+                       >
+                         {(() => {
+                           const allowedRoles = selectedSlotRole ? LEADER_ROLE_MAP[selectedSlotRole] || [] : [];
+                           const candidates = allUsers.filter(u => allowedRoles.includes(u.standardized_role || '') && u.region === selectedSlotRegion);
+                           return candidates.map(u => (
+                             <option key={u.id} value={u.id} style={{ color: '#013E3F' }}>{u.name}</option>
+                           ));
+                         })()}
+                       </select>
+                     </div>
+                   </div>
+
+                   {/* Decorative element */}
+                   <div className="absolute right-0 top-0 w-64 h-full bg-[#FDD344]/5 skew-x-[-15deg] translate-x-20" />
                  </div>
 
                  {/* METRIC EXPLANATION BLOCK */}
@@ -1275,16 +1383,37 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                  {managerMetricMode === 'snapshot' ? (
                    <>
                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                       {(() => { 
-                         const stats = getManagerStats(selectedCohortManager.id); 
+                       {(() => {
+                         const memberCount = slotMembers.length;
+                         const avgProgress = memberCount > 0
+                           ? Math.round(slotMembers.reduce((acc, m) => {
+                               const prog = userProgressMap[m.id] || [];
+                               const completed = prog.filter(p => p.completed).length;
+                               return acc + (allModules.length > 0 ? (completed / allModules.length) * 100 : 0);
+                             }, 0) / memberCount)
+                           : 0;
+                         const today = new Date().toISOString().split('T')[0];
+                         const cohortStart = selectedCohortData?.starting_date;
+                         const overdueCount = slotMembers.reduce((acc, m) => {
+                           const prog = userProgressMap[m.id] || [];
+                           const progressMap = new Map(prog.map(p => [p.module_id, p]));
+                           return acc + allModules.filter(mod => {
+                             const p = progressMap.get(mod.id);
+                             if (p?.completed) return false;
+                             const due = cohortStart
+                               ? new Date(new Date(cohortStart + 'T00:00:00').getTime() + (mod.day_offset ?? 0) * 86400000).toISOString().split('T')[0]
+                               : today;
+                             return due < today;
+                           }).length;
+                         }, 0);
                          return (
                            <>
-                             <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">Avg Progress</p><p className="text-3xl font-serif text-[#013E3F]">{stats.avgProgress}%</p></div>
-                             <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">Interactions</p><p className="text-3xl font-serif text-[#013E3F]">{stats.followUps}</p></div>
-                             <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">At-Risk Response</p><p className="text-3xl font-serif text-[#013E3F]">{stats.responseTime}</p></div>
-                             <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">Logins</p><p className="text-3xl font-serif text-[#013E3F]">{stats.loginFrequency}</p></div>
+                             <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">Avg Progress</p><p className="text-3xl font-serif text-[#013E3F]">{avgProgress}%</p></div>
+                             <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">Interactions</p><p className="text-3xl font-serif text-[#013E3F]">—</p></div>
+                             <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">At-Risk Response</p><p className="text-3xl font-serif text-[#013E3F]">{overdueCount > 0 ? `${overdueCount} overdue` : 'None'}</p></div>
+                             <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">Logins</p><p className="text-3xl font-serif text-[#013E3F]">{loginCount > 0 ? `${loginCount} login${loginCount === 1 ? '' : 's'}` : 'None'}</p></div>
                            </>
-                         ); 
+                         );
                        })()}
                      </div>
                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1302,14 +1431,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                          </h4>
                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                            {slotMembers.map(profile => {
-                             const progress = ((profile.id.charCodeAt(0) * 7 + profile.id.charCodeAt(1) * 13) % 80) + 10;
+                             const userProgress = userProgressMap[profile.id] || [];
+                             const completedCount = userProgress.filter(up => up.completed).length;
+                             const progress = allModules.length > 0
+                               ? Math.round((completedCount / allModules.length) * 100)
+                               : 0;
                              const avatarUrl = profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=013E3F&color=F3EEE7`;
                              return (
                                <div key={profile.id} onClick={() => {
                                 const cohortStart = selectedCohortData?.starting_date;
+                                const memberProgress = userProgressMap[profile.id] || [];
+                                const progressByModuleId = new Map(memberProgress.map(p => [p.module_id, p]));
                                 const userModules = allModules
-                                  .filter(mod => !mod.target_role || mod.target_role === profile.standardized_role)
                                   .map(mod => {
+                                    const prog = progressByModuleId.get(mod.id);
                                     const dueDate = cohortStart
                                       ? new Date(new Date(cohortStart + 'T00:00:00').getTime() + (mod.day_offset ?? 0) * 86400000).toISOString().split('T')[0]
                                       : new Date().toISOString().split('T')[0];
@@ -1319,13 +1454,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                                       description: mod.description || '',
                                       type: mod.type as TrainingModule['type'],
                                       duration: mod.duration || '',
-                                      completed: false,
+                                      completed: prog?.completed || false,
                                       dueDate,
                                       link: mod.link || undefined,
                                       host: mod.host || undefined,
                                     };
                                   });
-                                setSelectedHireForDrilldown({ id: profile.id, name: profile.name, role: profile.role as UserRole, avatar: avatarUrl, title: profile.title || '—', email: profile.email, managerId: profile.manager_id || '', startDate: profile.start_date || new Date().toISOString(), progress, department: profile.department || '', modules: userModules }); setDrilldownTab('overview'); }} className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 hover:border-[#FDD344] transition-all group cursor-pointer shadow-sm relative overflow-hidden">
+                                const modalProgress = userModules.length > 0
+                                  ? Math.round((userModules.filter(m => m.completed).length / userModules.length) * 100)
+                                  : 0;
+                                setSelectedHireForDrilldown({ id: profile.id, name: profile.name, role: profile.role as UserRole, avatar: avatarUrl, title: profile.title || '—', email: profile.email, managerId: profile.manager_id || '', startDate: profile.start_date || new Date().toISOString(), progress: modalProgress, department: profile.department || '', modules: userModules }); setDrilldownTab('overview'); }} className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 hover:border-[#FDD344] transition-all group cursor-pointer shadow-sm relative overflow-hidden">
                                   <div className="flex items-center gap-4 mb-4"><img src={avatarUrl} className="w-12 h-12 rounded-full border border-[#013E3F]/10" /><div><h4 className="font-bold text-[#013E3F] text-lg leading-tight group-hover:text-[#FDD344] transition-colors">{profile.name}</h4><p className="text-[10px] uppercase font-bold text-[#013E3F]/40 tracking-wider">{profile.title || '—'}</p></div></div><div className="w-full bg-[#F3EEE7] h-2 rounded-full overflow-hidden mb-3"><div className="h-full bg-[#013E3F] transition-all duration-500" style={{ width: `${progress}%` }} /></div><div className="flex justify-between items-center"><div className="flex flex-col"><span className="text-[10px] font-bold uppercase opacity-30">Completion</span><span className="font-serif font-bold text-[#013E3F]">{progress}%</span></div><button className="text-[9px] font-bold uppercase tracking-widest text-[#013E3F]/40 group-hover:text-[#013E3F] flex items-center gap-1">View Profile <ArrowRight className="w-3 h-3" /></button></div><div className="absolute right-0 top-0 w-24 h-24 bg-[#FDD344]/5 rounded-full -translate-y-12 translate-x-12 group-hover:scale-150 transition-transform duration-500"></div>
                                </div>
                              );
@@ -1338,40 +1476,95 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                    </>
                  ) : (
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in duration-500">
-                      {/* Trend Charts */}
-                      {[
-                        { key: 'avgProgress', label: 'Avg. Progress Trend (%)', color: '#013E3F', suffix: '%' },
-                        { key: 'interactions', label: 'Monthly Interactions', color: '#FDD344', suffix: '' },
-                        { key: 'responseTime', label: 'At-Risk Response (Hours)', color: '#EF4444', suffix: 'h' },
-                        { key: 'logins', label: 'Weekly Logins', color: '#3B82F6', suffix: 'x' }
-                      ].map(metric => (
-                        <div key={metric.key} className="bg-white p-8 rounded-2xl border border-[#013E3F]/10 shadow-sm h-[320px] flex flex-col">
-                           <h4 className="font-serif text-lg text-[#013E3F] mb-6 flex items-center justify-between">
-                             {metric.label}
-                             <TrendingUp className="w-4 h-4 opacity-30" />
-                           </h4>
-                           <div className="flex-1 min-h-0">
-                              <ResponsiveContainer width="100%" height="100%">
-                                 <AreaChart data={getHistoricalData(selectedCohortManager.id)}>
-                                    <defs>
-                                       <linearGradient id={`grad-${metric.key}`} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="5%" stopColor={metric.color} stopOpacity={0.2}/>
-                                          <stop offset="95%" stopColor={metric.color} stopOpacity={0}/>
-                                       </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f1" />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#013E3F40'}} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#013E3F40'}} unit={metric.suffix} />
-                                    <Tooltip 
-                                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
-                                       cursor={{ stroke: metric.color, strokeWidth: 1 }}
-                                    />
-                                    <Area type="monotone" dataKey={metric.key} stroke={metric.color} strokeWidth={3} fillOpacity={1} fill={`url(#grad-${metric.key})`} />
-                                 </AreaChart>
-                              </ResponsiveContainer>
-                           </div>
+                      {/* Avg Progress Trend */}
+                      <div className="bg-white p-8 rounded-2xl border border-[#013E3F]/10 shadow-sm h-[320px] flex flex-col">
+                        <h4 className="font-serif text-lg text-[#013E3F] mb-6 flex items-center justify-between">
+                          Avg. Progress Trend (%)
+                          <TrendingUp className="w-4 h-4 opacity-30" />
+                        </h4>
+                        {avgProgressChartData.length > 0 ? (
+                          <div className="flex-1 min-h-0">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={avgProgressChartData}>
+                                <defs>
+                                  <linearGradient id="grad-avgProgress" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#013E3F" stopOpacity={0.2}/>
+                                    <stop offset="95%" stopColor="#013E3F" stopOpacity={0}/>
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f1" />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#013E3F40'}} dy={10} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#013E3F40'}} unit="%" />
+                                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }} cursor={{ stroke: '#013E3F', strokeWidth: 1 }} />
+                                <Area type="monotone" dataKey="avgProgress" stroke="#013E3F" strokeWidth={3} fillOpacity={1} fill="url(#grad-avgProgress)" />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex flex-col items-center justify-center text-[#013E3F]/30">
+                            <CheckCircle className="w-10 h-10 mb-3 opacity-40" />
+                            <p className="text-sm font-medium">No completion data yet</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Monthly Interactions — empty state */}
+                      <div className="bg-white p-8 rounded-2xl border border-[#013E3F]/10 shadow-sm h-[320px] flex flex-col">
+                        <h4 className="font-serif text-lg text-[#013E3F] mb-6 flex items-center justify-between">
+                          Monthly Interactions
+                          <TrendingUp className="w-4 h-4 opacity-30" />
+                        </h4>
+                        <div className="flex-1 flex flex-col items-center justify-center text-[#013E3F]/30">
+                          <MessageSquare className="w-10 h-10 mb-3 opacity-40" />
+                          <p className="text-sm font-medium">No data yet</p>
+                          <p className="text-xs mt-1 opacity-60">Debrief and sign-off tracking coming soon</p>
                         </div>
-                      ))}
+                      </div>
+
+                      {/* At-Risk Response — empty state */}
+                      <div className="bg-white p-8 rounded-2xl border border-[#013E3F]/10 shadow-sm h-[320px] flex flex-col">
+                        <h4 className="font-serif text-lg text-[#013E3F] mb-6 flex items-center justify-between">
+                          At-Risk Response
+                          <TrendingUp className="w-4 h-4 opacity-30" />
+                        </h4>
+                        <div className="flex-1 flex flex-col items-center justify-center text-[#013E3F]/30">
+                          <AlertCircle className="w-10 h-10 mb-3 opacity-40" />
+                          <p className="text-sm font-medium">No data yet</p>
+                          <p className="text-xs mt-1 opacity-60">Overdue task acknowledgment tracking coming soon</p>
+                        </div>
+                      </div>
+
+                      {/* Weekly Logins */}
+                      <div className="bg-white p-8 rounded-2xl border border-[#013E3F]/10 shadow-sm h-[320px] flex flex-col">
+                        <h4 className="font-serif text-lg text-[#013E3F] mb-6 flex items-center justify-between">
+                          Weekly Logins
+                          <TrendingUp className="w-4 h-4 opacity-30" />
+                        </h4>
+                        {loginsChartData.length > 0 ? (
+                          <div className="flex-1 min-h-0">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={loginsChartData}>
+                                <defs>
+                                  <linearGradient id="grad-logins" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2}/>
+                                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f1" />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#013E3F40'}} dy={10} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#013E3F40'}} />
+                                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }} cursor={{ stroke: '#3B82F6', strokeWidth: 1 }} />
+                                <Area type="monotone" dataKey="logins" stroke="#3B82F6" strokeWidth={3} fillOpacity={1} fill="url(#grad-logins)" />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex flex-col items-center justify-center text-[#013E3F]/30">
+                            <Activity className="w-10 h-10 mb-3 opacity-40" />
+                            <p className="text-sm font-medium">No login data yet</p>
+                          </div>
+                        )}
+                      </div>
                    </div>
                  )}
               </div>
@@ -1848,8 +2041,53 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       {/* COMMUNICATIONS VIEW */}
       {viewMode === 'communications' && (
         <div className="space-y-8 animate-in fade-in duration-300">
-           <div className="flex gap-1 p-1 bg-[#012d2e] rounded-xl w-fit"><button onClick={() => setMessageTarget('newhires')} className={`px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest ${messageTarget === 'newhires' ? 'bg-[#FDD344] text-[#013E3F] shadow-lg' : 'text-[#F3EEE7]/60'}`}>New Hires</button><button onClick={() => setMessageTarget('managers')} className={`px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest ${messageTarget === 'managers' ? 'bg-[#FDD344] text-[#013E3F] shadow-lg' : 'text-[#F3EEE7]/60'}`}>Managers</button></div>
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{NEW_HIRES.map(targetUser => (<div key={targetUser.id} className="bg-white rounded-2xl p-6 border border-[#013E3F]/10 shadow-sm"><div className="flex items-center gap-4 mb-6"><img src={targetUser.avatar} className="w-12 h-12 rounded-full" /><div><h4 className="font-bold text-[#013E3F] truncate">{targetUser.name}</h4><p className="text-[10px] uppercase font-bold text-[#013E3F]/40 tracking-wider">{targetUser.title}</p></div></div><div className="grid grid-cols-3 gap-2"><button onClick={() => handleInitiateComms(targetUser, 'email')} className="flex flex-col items-center p-3 rounded-xl bg-[#F3EEE7]/50 hover:bg-[#FDD344]/10 transition-colors"><Mail className="w-5 h-5 mb-1" /><span className="text-[9px] font-bold uppercase">Email</span></button><button onClick={() => handleInitiateComms(targetUser, 'slack')} className="flex flex-col items-center p-3 rounded-xl bg-[#F3EEE7]/50 hover:bg-[#FDD344]/10 transition-colors"><Slack className="w-5 h-5 mb-1" /><span className="text-[9px] font-bold uppercase">Slack</span></button><button onClick={() => handleInitiateComms(targetUser, 'survey')} className="flex flex-col items-center p-3 rounded-xl bg-[#F3EEE7]/50 hover:bg-[#FDD344]/10 transition-colors"><ClipboardCheck className="w-5 h-5 mb-1" /><span className="text-[9px] font-bold uppercase">Survey</span></button></div></div>))}</div>
+           <div className="flex items-center gap-4 flex-wrap">
+             <div className="flex gap-1 p-1 bg-[#012d2e] rounded-xl w-fit">
+               <button onClick={() => { setMessageTarget('newhires'); setMessageSearch(''); }} className={`px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest ${messageTarget === 'newhires' ? 'bg-[#FDD344] text-[#013E3F] shadow-lg' : 'text-[#F3EEE7]/60'}`}>New Hires</button>
+               <button onClick={() => { setMessageTarget('managers'); setMessageSearch(''); }} className={`px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest ${messageTarget === 'managers' ? 'bg-[#FDD344] text-[#013E3F] shadow-lg' : 'text-[#F3EEE7]/60'}`}>Managers</button>
+             </div>
+             <div className="relative flex-1 max-w-xs">
+               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#F3EEE7]/40" />
+               <input
+                 type="text"
+                 placeholder="Search by name, email, or title…"
+                 value={messageSearch}
+                 onChange={e => setMessageSearch(e.target.value)}
+                 className="w-full pl-10 pr-4 py-2.5 bg-[#012d2e] border border-[#F3EEE7]/10 rounded-xl text-sm text-[#F3EEE7] placeholder-[#F3EEE7]/30 focus:outline-none focus:ring-1 focus:ring-[#FDD344]/50"
+               />
+             </div>
+           </div>
+           {filteredCommsUsers.length === 0 ? (
+             <div className="bg-white/5 border border-[#F3EEE7]/10 rounded-2xl p-12 text-center">
+               <Users className="w-10 h-10 text-[#F3EEE7]/20 mx-auto mb-3" />
+               <p className="text-[#F3EEE7]/40 text-sm">{usersLoading ? 'Loading users…' : 'No users found'}</p>
+             </div>
+           ) : (
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+               {filteredCommsUsers.map(profile => (
+                 <div key={profile.id} className="bg-white rounded-2xl p-6 border border-[#013E3F]/10 shadow-sm">
+                   <div className="flex items-center gap-4 mb-6">
+                     <img src={profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=013E3F&color=F3EEE7`} className="w-12 h-12 rounded-full" />
+                     <div>
+                       <h4 className="font-bold text-[#013E3F] truncate">{profile.name}</h4>
+                       <p className="text-[10px] uppercase font-bold text-[#013E3F]/40 tracking-wider">{profile.title || profile.standardized_role || profile.role}</p>
+                     </div>
+                   </div>
+                   <div className="grid grid-cols-3 gap-2">
+                     <button onClick={() => handleInitiateComms(profile, 'slack')} className="flex flex-col items-center p-3 rounded-xl border border-[#013E3F]/15 bg-[#013E3F]/5 hover:bg-[#FDD344]/20 hover:border-[#FDD344]/40 transition-colors text-[#013E3F]">
+                       <Slack className="w-5 h-5 mb-1" /><span className="text-[9px] font-bold uppercase">Slack</span>
+                     </button>
+                     <button disabled title="Coming soon" className="flex flex-col items-center p-3 rounded-xl border border-[#013E3F]/10 bg-[#F3EEE7]/30 opacity-40 cursor-not-allowed text-[#013E3F]/50">
+                       <Mail className="w-5 h-5 mb-1" /><span className="text-[9px] font-bold uppercase">Email</span>
+                     </button>
+                     <button disabled title="Coming soon" className="flex flex-col items-center p-3 rounded-xl border border-[#013E3F]/10 bg-[#F3EEE7]/30 opacity-40 cursor-not-allowed text-[#013E3F]/50">
+                       <ClipboardCheck className="w-5 h-5 mb-1" /><span className="text-[9px] font-bold uppercase">Survey</span>
+                     </button>
+                   </div>
+                 </div>
+               ))}
+             </div>
+           )}
         </div>
       )}
 
@@ -1873,7 +2111,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
 
       {/* MODALS */}
       {selectedUserForComms && activeCommsAction && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"><div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-10 animate-in zoom-in-95"><div className="flex justify-between items-center mb-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-[#F3EEE7] rounded-full flex items-center justify-center text-[#013E3F]">{activeCommsAction === 'email' && <Mail />}{activeCommsAction === 'slack' && <Slack />}{activeCommsAction === 'survey' && <ClipboardCheck />}</div><div><h3 className="font-serif text-2xl text-[#013E3F]">{activeCommsAction === 'survey' ? 'Satisfaction Survey' : `Draft ${activeCommsAction.charAt(0).toUpperCase() + activeCommsAction.slice(1)}`}</h3><p className="text-sm opacity-40 font-bold uppercase tracking-widest">To: {selectedUserForComms.name}</p></div></div><button onClick={() => setSelectedUserForComms(null)}><X className="w-5 h-5"/></button></div><div className="p-6 bg-[#F9F7F5] rounded-xl border border-[#013E3F]/10 min-h-[200px] relative">{sendingComms ? <div className="absolute inset-0 flex flex-col items-center justify-center"><Loader2 className="animate-spin mb-4" /><span>AI Drafting...</span></div> : <textarea className="w-full bg-transparent border-none text-sm text-[#013E3F] min-h-[200px] resize-none focus:ring-0" value={commsDraft} onChange={e => setCommsDraft(e.target.value)} />}</div><button disabled={sendingComms || !commsDraft.trim()} onClick={async () => { if (activeCommsAction === 'slack') { setSendingComms(true); const result = await sendSlackDM(selectedUserForComms.email, commsDraft); setSendingComms(false); if (result.success) { setSelectedUserForComms(null); alert('Slack message sent!'); } else { alert(`Failed to send: ${result.error || 'Unknown error'}`); } } else if (activeCommsAction === 'email') { window.open(`mailto:${selectedUserForComms.email}?subject=Onboarding Update&body=${encodeURIComponent(commsDraft)}`); setSelectedUserForComms(null); } else { setSelectedUserForComms(null); } }} className="w-full mt-6 py-5 bg-[#013E3F] text-[#F3EEE7] rounded-xl font-bold uppercase shadow-xl tracking-widest disabled:opacity-40 disabled:cursor-not-allowed">{sendingComms ? 'Sending...' : activeCommsAction === 'slack' ? 'Send via Slack' : activeCommsAction === 'email' ? 'Send Email' : 'Dispatch Message'}</button></div></div>,
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"><div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-10 animate-in zoom-in-95"><div className="flex justify-between items-center mb-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-[#F3EEE7] rounded-full flex items-center justify-center text-[#013E3F]">{activeCommsAction === 'email' && <Mail />}{activeCommsAction === 'slack' && <Slack />}{activeCommsAction === 'survey' && <ClipboardCheck />}</div><div><h3 className="font-serif text-2xl text-[#013E3F]">{activeCommsAction === 'survey' ? 'Satisfaction Survey' : `Draft ${activeCommsAction.charAt(0).toUpperCase() + activeCommsAction.slice(1)}`}</h3><p className="text-sm opacity-40 font-bold uppercase tracking-widest">To: {selectedUserForComms.name}</p></div></div><button onClick={() => setSelectedUserForComms(null)}><X className="w-5 h-5"/></button></div><div className="p-6 bg-[#F9F7F5] rounded-xl border border-[#013E3F]/10 min-h-[200px] relative">{sendingComms ? <div className="absolute inset-0 flex flex-col items-center justify-center"><Loader2 className="animate-spin mb-4" /><span>AI Drafting...</span></div> : <textarea className="w-full bg-transparent border-none text-sm text-[#013E3F] min-h-[200px] resize-none focus:ring-0" value={commsDraft} onChange={e => setCommsDraft(e.target.value)} />}</div><button disabled={sendingComms || !commsDraft.trim()} onClick={async () => { if (activeCommsAction === 'slack') { setSendingComms(true); const result = await sendSlackDM(selectedUserForComms.email, commsDraft); setSendingComms(false); if (result.success) { setSelectedUserForComms(null); toast.success('Slack message sent!'); } else { toast.error(`Failed to send: ${result.error || 'Unknown error'}`); } } else if (activeCommsAction === 'email') { window.open(`mailto:${selectedUserForComms.email}?subject=Onboarding Update&body=${encodeURIComponent(commsDraft)}`); setSelectedUserForComms(null); } else { setSelectedUserForComms(null); } }} className="w-full mt-6 py-5 bg-[#013E3F] text-[#F3EEE7] rounded-xl font-bold uppercase shadow-xl tracking-widest disabled:opacity-40 disabled:cursor-not-allowed">{sendingComms ? 'Sending...' : activeCommsAction === 'slack' ? 'Send via Slack' : activeCommsAction === 'email' ? 'Send Email' : 'Dispatch Message'}</button></div></div>,
       document.body)}
 
       {showEnrolledDrilldown && createPortal(

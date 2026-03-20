@@ -364,6 +364,23 @@ export interface Database {
           created_at?: string;
         };
       };
+      session_logs: {
+        Row: {
+          id: string;
+          user_id: string;
+          logged_in_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          logged_in_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          logged_in_at?: string;
+        };
+      };
       cohort_leaders: {
         Row: {
           id: string;
@@ -431,3 +448,5 @@ export type CohortUpdate = Database['public']['Tables']['cohorts']['Update'];
 export type CohortLeader = Database['public']['Tables']['cohort_leaders']['Row'];
 export type CohortLeaderInsert = Database['public']['Tables']['cohort_leaders']['Insert'];
 export type CohortWithLeaders = Cohort & { cohort_leaders: (CohortLeader & { profiles: Profile })[] };
+
+export type SessionLog = Database['public']['Tables']['session_logs']['Row'];

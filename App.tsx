@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { UserRole } from './types';
 import type { Profile, UserRole as DbUserRole } from './types/database';
 import { useAuth } from './hooks/useAuth';
@@ -10,10 +10,45 @@ import NewHireDashboard from './components/NewHireDashboard';
 import Login from './components/Login';
 import ErrorBoundary from './components/ErrorBoundary';
 import ConnectionStatus from './components/ConnectionStatus';
-import { LayoutDashboard, Users, BookOpen, LogOut, Menu, ClipboardList, Calendar, MessageSquare, PieChart, Settings, ChevronRight, Loader2, ListTodo } from 'lucide-react';
+import Sidebar from './components/Sidebar';
+import { ToastProvider } from './components/Toast';
+import { Menu, Loader2 } from 'lucide-react';
 
 // Using a data URI for a reliable, offline-capable logo placeholder that resembles the brand
 const INDUSTRIOUS_LOGO_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 60'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='serif' font-weight='bold' font-size='32' fill='%23F3EEE7' letter-spacing='4'%3EINDUSTRIOUS%3C/text%3E%3C/svg%3E";
+
+// --- URL param helpers for shareable deep links ---
+
+const VIEW_TO_ROLE: Record<string, UserRole> = {
+  admin: UserRole.ADMIN,
+  manager: UserRole.MANAGER,
+  newhire: UserRole.NEW_HIRE,
+};
+const ROLE_TO_VIEW: Record<UserRole, string> = {
+  [UserRole.ADMIN]: 'admin',
+  [UserRole.MANAGER]: 'manager',
+  [UserRole.NEW_HIRE]: 'newhire',
+};
+
+const VALID_ADMIN_TABS: AdminViewMode[] = ['dashboard', 'workflow', 'tasks', 'cohorts', 'agenda', 'communications', 'engagement', 'settings'];
+const VALID_MANAGER_TABS = ['team', 'tracker'] as const;
+const VALID_NEWHIRE_TABS = ['dashboard', 'calendar', 'workbook'] as const;
+
+function readUrlParams(): { view: UserRole | null; tab: string | null } {
+  const params = new URLSearchParams(window.location.search);
+  const viewStr = params.get('view');
+  const tabStr = params.get('tab');
+  const view = viewStr ? VIEW_TO_ROLE[viewStr] ?? null : null;
+  return { view, tab: tabStr };
+}
+
+function updateUrlParams(view: string, tab?: string) {
+  const params = new URLSearchParams();
+  params.set('view', view);
+  if (tab) params.set('tab', tab);
+  const url = `${window.location.pathname}?${params.toString()}`;
+  window.history.replaceState(null, '', url);
+}
 
 // Map database role to UserRole enum
 function mapDbRoleToUserRole(dbRole: DbUserRole): UserRole {
@@ -54,10 +89,30 @@ const App: React.FC = () => {
   // Admin Sub-View State (Lifted from AdminDashboard)
   const [adminViewMode, setAdminViewMode] = useState<AdminViewMode>('dashboard');
 
-  // Set initial view when profile loads
+  // Child dashboard tab state (Manager / NewHire)
+  const [childTab, setChildTab] = useState<string | undefined>(undefined);
+
+  // Set initial view when profile loads, respecting URL params
   useEffect(() => {
     if (profile && !currentView) {
-      setCurrentView(mapDbRoleToUserRole(profile.role));
+      const urlParams = readUrlParams();
+      const userRole = mapDbRoleToUserRole(profile.role);
+      const isAdmin = userRole === UserRole.ADMIN;
+
+      // Admins can deep-link to any view; others ignore the view param
+      const resolvedView = (isAdmin && urlParams.view) ? urlParams.view : userRole;
+      setCurrentView(resolvedView);
+
+      // Apply tab param if valid for the resolved view
+      if (urlParams.tab) {
+        if (resolvedView === UserRole.ADMIN && (VALID_ADMIN_TABS as readonly string[]).includes(urlParams.tab)) {
+          setAdminViewMode(urlParams.tab as AdminViewMode);
+        } else if (resolvedView === UserRole.MANAGER && (VALID_MANAGER_TABS as readonly string[]).includes(urlParams.tab)) {
+          setChildTab(urlParams.tab);
+        } else if (resolvedView === UserRole.NEW_HIRE && (VALID_NEWHIRE_TABS as readonly string[]).includes(urlParams.tab)) {
+          setChildTab(urlParams.tab);
+        }
+      }
     }
   }, [profile, currentView]);
 
@@ -66,20 +121,41 @@ const App: React.FC = () => {
     if (!user) {
       setCurrentView(null);
       setAdminViewMode('dashboard');
+      setChildTab(undefined);
     }
   }, [user]);
+
+  // Sync URL whenever navigation state changes
+  useEffect(() => {
+    if (currentView) {
+      const viewStr = ROLE_TO_VIEW[currentView];
+      let tab: string | undefined;
+      if (currentView === UserRole.ADMIN) {
+        tab = adminViewMode;
+      } else if (currentView === UserRole.MANAGER || currentView === UserRole.NEW_HIRE) {
+        tab = childTab;
+      }
+      updateUrlParams(viewStr, tab);
+    }
+  }, [currentView, adminViewMode, childTab]);
 
   const handleLogout = async () => {
     await signOut();
     setCurrentView(null);
     setIsSidebarOpen(false);
     setAdminViewMode('dashboard');
+    setChildTab(undefined);
   };
 
   const handleViewSwitch = (view: UserRole) => {
     setCurrentView(view);
+    setChildTab(undefined);
     setIsSidebarOpen(false);
   };
+
+  const handleChildTabChange = useCallback((tab: string) => {
+    setChildTab(tab);
+  }, []);
 
   // Convert profile to user object for existing components
   const currentUser = profile ? profileToUser(profile) : null;
@@ -90,9 +166,9 @@ const App: React.FC = () => {
       case UserRole.ADMIN:
         return <AdminDashboard user={currentUser} viewMode={adminViewMode} setViewMode={setAdminViewMode} />;
       case UserRole.MANAGER:
-        return <ManagerDashboard user={currentUser} />;
+        return <ManagerDashboard user={currentUser} initialTab={childTab as 'team' | 'tracker' | undefined} onTabChange={handleChildTabChange} />;
       case UserRole.NEW_HIRE:
-        return <NewHireDashboard user={currentUser} />;
+        return <NewHireDashboard user={currentUser} initialTab={childTab as 'dashboard' | 'calendar' | 'workbook' | undefined} onTabChange={handleChildTabChange} />;
       default:
         return <div>Unknown View</div>;
     }
@@ -143,122 +219,19 @@ const App: React.FC = () => {
 
   return (
     <ErrorBoundary>
+      <ToastProvider>
       <ConnectionStatus />
-      <div className="min-h-screen flex bg-[#013E3F]">
+      <div className="h-screen overflow-hidden flex bg-[#013E3F]">
         {/* Sidebar Navigation */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#012d2e] border-r border-[#F3EEE7]/5 text-white transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="h-full flex flex-col">
-          <div className="p-8 border-b border-[#F3EEE7]/5 flex items-center gap-3">
-             <img src={INDUSTRIOUS_LOGO_SVG} alt="Industrious Logo" className="h-8 w-auto object-contain opacity-90" />
-          </div>
-
-          <nav className="flex-1 px-4 py-8 overflow-y-auto custom-scrollbar">
-             {/* Admin View Navigation Group */}
-             {currentUser.role === UserRole.ADMIN && (
-               <div className="space-y-1">
-                 <p className="px-4 text-[11px] font-bold text-[#F3EEE7]/40 uppercase tracking-[2px] mb-4">Admin Console</p>
-
-                 <button
-                   onClick={() => { handleViewSwitch(UserRole.ADMIN); setAdminViewMode('dashboard'); }}
-                   className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all ${currentView === UserRole.ADMIN && adminViewMode === 'dashboard' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
-                 >
-                    <LayoutDashboard className="w-5 h-5" /> Dashboard
-                 </button>
-
-                 <button
-                   onClick={() => { handleViewSwitch(UserRole.ADMIN); setAdminViewMode('workflow'); }}
-                   className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all ${currentView === UserRole.ADMIN && adminViewMode === 'workflow' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
-                 >
-                    <ClipboardList className="w-5 h-5" /> People
-                 </button>
-
-                 <button
-                   onClick={() => { handleViewSwitch(UserRole.ADMIN); setAdminViewMode('tasks'); }}
-                   className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all ${currentView === UserRole.ADMIN && adminViewMode === 'tasks' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
-                 >
-                    <ListTodo className="w-5 h-5" /> Tasks
-                 </button>
-
-                 <button
-                   onClick={() => { handleViewSwitch(UserRole.ADMIN); setAdminViewMode('cohorts'); }}
-                   className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all ${currentView === UserRole.ADMIN && adminViewMode === 'cohorts' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
-                 >
-                    <Users className="w-5 h-5" /> New Bees & Cohorts
-                 </button>
-
-                 <button
-                   onClick={() => { handleViewSwitch(UserRole.ADMIN); setAdminViewMode('agenda'); }}
-                   className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all ${currentView === UserRole.ADMIN && adminViewMode === 'agenda' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
-                 >
-                    <Calendar className="w-5 h-5" /> Agenda & Presenters
-                 </button>
-
-                 <button
-                   onClick={() => { handleViewSwitch(UserRole.ADMIN); setAdminViewMode('communications'); }}
-                   className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all ${currentView === UserRole.ADMIN && adminViewMode === 'communications' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
-                 >
-                    <MessageSquare className="w-5 h-5" /> Communications
-                 </button>
-
-                 <button
-                   onClick={() => { handleViewSwitch(UserRole.ADMIN); setAdminViewMode('engagement'); }}
-                   className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all ${currentView === UserRole.ADMIN && adminViewMode === 'engagement' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
-                 >
-                    <PieChart className="w-5 h-5" /> Cohort Engagement
-                 </button>
-
-                 <button
-                   onClick={() => { handleViewSwitch(UserRole.ADMIN); setAdminViewMode('settings'); }}
-                   className={`w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all ${currentView === UserRole.ADMIN && adminViewMode === 'settings' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
-                 >
-                    <div className="flex items-center gap-3">
-                      <Settings className="w-5 h-5" />
-                      Settings
-                    </div>
-                    <ChevronRight className={`w-4 h-4 transition-transform ${currentView === UserRole.ADMIN && adminViewMode === 'settings' ? 'rotate-90' : 'opacity-40'}`} />
-                 </button>
-
-                 <div className="h-4"></div>
-               </div>
-             )}
-
-             {/* Secondary Views (Preview for Admin, Primary for Manager/Hire) */}
-             <p className="px-4 text-[10px] font-bold text-[#F3EEE7]/20 uppercase tracking-[1px] mb-4 mt-8">Unit Views</p>
-
-             {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.MANAGER) && (
-               <button
-                 onClick={() => handleViewSwitch(UserRole.MANAGER)}
-                 className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all mt-1 ${currentView === UserRole.MANAGER ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
-               >
-                  <Users className="w-5 h-5" /> Manager Overview
-               </button>
-             )}
-
-             <button
-               onClick={() => handleViewSwitch(UserRole.NEW_HIRE)}
-               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all mt-1 ${currentView === UserRole.NEW_HIRE ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
-             >
-                <BookOpen className="w-5 h-5" /> {currentUser.role === UserRole.NEW_HIRE ? 'My Journey' : 'New Hire View'}
-             </button>
-          </nav>
-
-          <div className="p-4 border-t border-[#F3EEE7]/5 bg-[#012526]">
-            <div className="flex items-center gap-3 px-4 py-3 mb-2">
-              <img src={currentUser.avatar} alt="User" className="w-9 h-9 rounded-full border border-[#F3EEE7]/10" />
-              <div className="flex-1 overflow-hidden">
-                <p className="text-sm font-medium truncate text-[#F3EEE7] font-serif">{currentUser.name}</p>
-                <p className="text-[10px] text-[#F3EEE7]/40 truncate uppercase tracking-widest">{currentUser.role}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest text-[#F3EEE7]/50 hover:text-[#F3EEE7] py-3 rounded transition-colors group"
-            >
-              <LogOut className="w-3 h-3 group-hover:text-[#FDD344]" /> Sign Out
-            </button>
-          </div>
-        </div>
-      </aside>
+        <Sidebar
+          isOpen={isSidebarOpen}
+          currentUser={currentUser!}
+          currentView={currentView}
+          adminViewMode={adminViewMode}
+          onViewSwitch={handleViewSwitch}
+          onAdminViewModeChange={setAdminViewMode}
+          onLogout={handleLogout}
+        />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -274,6 +247,7 @@ const App: React.FC = () => {
 
         {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />}
       </div>
+      </ToastProvider>
     </ErrorBoundary>
   );
 };

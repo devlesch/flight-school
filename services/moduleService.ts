@@ -61,6 +61,23 @@ export async function getModules(): Promise<TrainingModule[]> {
 }
 
 /**
+ * Get user_modules rows for multiple users in a single query
+ */
+export async function getUserModulesBatch(userIds: string[]): Promise<UserModule[]> {
+  if (userIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('user_modules')
+    .select('*')
+    .in('user_id', userIds);
+
+  if (error) {
+    console.error('Error fetching batch user modules:', error.message);
+    return [];
+  }
+  return data as UserModule[];
+}
+
+/**
  * Get user's progress on all modules
  */
 export async function getUserModules(userId: string): Promise<UserModule[]> {
@@ -120,8 +137,10 @@ export async function updateModuleProgress(
   if (existingRecord) {
     // Update existing record
     const updateData: Record<string, unknown> = { ...updates };
-    if (updates.completed) {
+    if (updates.completed === true) {
       updateData.completed_at = new Date().toISOString();
+    } else if (updates.completed === false) {
+      updateData.completed_at = null;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -145,8 +164,10 @@ export async function updateModuleProgress(
       module_id: moduleId,
       ...updates,
     };
-    if (updates.completed) {
+    if (updates.completed === true) {
       insertData.completed_at = new Date().toISOString();
+    } else if (updates.completed === false) {
+      insertData.completed_at = null;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,6 +198,16 @@ export async function markModuleComplete(
     completed: true,
     score,
   });
+}
+
+/**
+ * Mark a module as incomplete
+ */
+export async function markModuleIncomplete(
+  userId: string,
+  moduleId: string
+): Promise<UserModule | null> {
+  return updateModuleProgress(userId, moduleId, { completed: false });
 }
 
 /**

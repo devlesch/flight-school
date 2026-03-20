@@ -6,6 +6,8 @@ import {
   getSession,
   onAuthStateChange,
 } from '../services/authService';
+import { supabase } from '../lib/supabase';
+import { updateProfile } from '../services/profileService';
 
 export interface UseAuthReturn {
   user: User | null;
@@ -40,7 +42,25 @@ export function useAuth(): UseAuthReturn {
       setLoading(false);
     });
 
-    return unsubscribe;
+    // Record login events
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          supabase.from('session_logs').insert({ user_id: session.user.id }).then();
+
+          // Sync Google avatar to profile on every login
+          const avatarUrl = session.user.user_metadata?.avatar_url;
+          if (avatarUrl) {
+            updateProfile(session.user.id, { avatar: avatarUrl } as any);
+          }
+        }
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      authSub.unsubscribe();
+    };
   }, []);
 
   const handleSignIn = async () => {
