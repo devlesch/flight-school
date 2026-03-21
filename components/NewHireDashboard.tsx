@@ -3,6 +3,7 @@ import { User, NewHireProfile, TrainingModule } from '../types';
 import { NEW_HIRES, MANAGERS, UNIVERSAL_SERVICE_STEPS } from '../constants';
 import { CheckCircle, Circle, Video, FileText, ArrowRight, Slack, Megaphone, Target, ClipboardList, Users, UserCheck, BookOpen, X, Save, AtSign, Lightbulb, PenTool, MessageSquare, Quote, ChevronRight, Calendar as CalendarIcon, ChevronLeft, AlertTriangle, ArrowUpRight, PlayCircle, MapPin, LayoutDashboard, HeartHandshake, Eye, Star, Compass, ListOrdered, Info, Briefcase, MessageCircle, Globe, GraduationCap, LifeBuoy, User as UserIcon, Link as LinkIcon, ThumbsUp, Send, Timer, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { useToast } from './Toast';
 import { useModules } from '../hooks/useModules';
 import { useWorkbook } from '../hooks/useWorkbook';
 import { useShoutouts } from '../hooks/useShoutouts';
@@ -10,12 +11,15 @@ import { useProfile } from '../hooks/useProfile';
 
 interface NewHireDashboardProps {
   user: User;
+  initialTab?: 'dashboard' | 'calendar' | 'workbook';
+  onTabChange?: (tab: string) => void;
 }
 
-const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
+const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, onTabChange }) => {
+  const toast = useToast();
   // Supabase hooks for data fetching
   const { profile: supabaseProfile, loading: profileLoading } = useProfile(user.id);
-  const { modules: supabaseModules, loading: modulesLoading, markComplete, toggleLike } = useModules(user.id);
+  const { modules: supabaseModules, loading: modulesLoading, markComplete, markIncomplete, toggleLike } = useModules(user.id);
   const { responsesMap: workbookResponses, commentsMap: workbookComments, loading: workbookLoading, saveResponse } = useWorkbook(user.id);
   const { shoutouts: supabaseShoutouts } = useShoutouts(user.id);
 
@@ -67,8 +71,17 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
   const myManager = MANAGERS.find(m => m.id === myProfile.managerId) || MANAGERS[0];
 
   // Navigation State
-  const [showWelcomeGuide, setShowWelcomeGuide] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'calendar' | 'workbook'>('dashboard');
+  const [showWelcomeGuide, setShowWelcomeGuide] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('newhire_welcome_dismissed') !== 'true';
+    }
+    return true;
+  });
+  const [activeTab, setActiveTabRaw] = useState<'dashboard' | 'calendar' | 'workbook'>(initialTab ?? 'dashboard');
+  const setActiveTab = (tab: 'dashboard' | 'calendar' | 'workbook') => {
+    setActiveTabRaw(tab);
+    onTabChange?.(tab);
+  };
 
   // We use a counter to force re-renders when deep objects (like comments/likes) change in the mock data
   const [updateCounter, setUpdateCounter] = useState(0);
@@ -151,18 +164,14 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
       });
     }
 
-    // Persist to Supabase if connected
-    if (supabaseModules.length > 0 && !wasCompleted) {
-      await markComplete(id);
-    }
-
-    // Also persist to mock data for backward compatibility
-    const module = mockProfile.modules.find(m => m.id === id);
-    if (module) {
-      module.completed = !wasCompleted;
-    }
-
     setCompletedModules(newSet);
+
+    // Persist to Supabase
+    if (!wasCompleted) {
+      await markComplete(id);
+    } else {
+      await markIncomplete(id);
+    }
   };
 
   // Engagement Handlers
@@ -269,7 +278,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
       origin: { y: 0.6 },
       colors: ['#FDD344', '#013E3F']
     });
-    alert("Workbook progress saved!");
+    toast.success("Workbook progress saved!");
   };
 
   const updateWorkbookInput = (key: string, value: string) => {
@@ -284,7 +293,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
     const currentVal = workbookInputs[key] || '';
     const tag = ` @${myManager.name} `;
     updateWorkbookInput(key, currentVal + tag);
-    alert(`Tagged ${myManager.name} in your response.`);
+    toast.info(`Tagged ${myManager.name} in your response.`);
   };
 
   const handleStart = () => {
@@ -294,6 +303,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
       origin: { y: 0.8 },
       colors: ['#FDD344', '#013E3F', '#EF4444', '#3B82F6', '#10B981']
     });
+    localStorage.setItem('newhire_welcome_dismissed', 'true');
     setShowWelcomeGuide(false);
     window.scrollTo(0, 0);
   };
@@ -653,7 +663,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user }) => {
         
         {/* Help / Guide Button to reopen the welcome screen */}
         <button 
-          onClick={() => setShowWelcomeGuide(true)}
+          onClick={() => { localStorage.removeItem('newhire_welcome_dismissed'); setShowWelcomeGuide(true); }}
           className="text-xs font-bold uppercase tracking-wide flex items-center gap-2 text-[#F3EEE7]/30 hover:text-[#FDD344] transition-colors whitespace-nowrap"
         >
            <Info className="w-4 h-4" /> Help

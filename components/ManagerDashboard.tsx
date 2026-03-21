@@ -3,12 +3,15 @@ import { User, NewHireProfile, WorkbookPrompt, ManagerTask, TrainingModule } fro
 import { NEW_HIRES, MANAGERS } from '../constants';
 import { Slack, Mail, CheckSquare, Clock, AlertTriangle, MessageSquarePlus, ChevronRight, X, AlertCircle, CheckCircle, BookOpen, MessageCircle, Megaphone, ListTodo, Calendar, Timer, Info, Target, ArrowRight, LayoutDashboard, Eye, PlusCircle, Send, Users, UserCheck, ChevronLeft, ClipboardList, Briefcase, UserPlus, Search, Filter, UserCog, RefreshCw, Loader2 } from 'lucide-react';
 import { generateEmailDraft } from '../services/geminiService';
+import { useToast } from './Toast';
 import confetti from 'canvas-confetti';
 import { useTeam } from '../hooks/useTeam';
 import { useManagerTasks } from '../hooks/useManagerTasks';
 
 interface ManagerDashboardProps {
   user: User;
+  initialTab?: 'team' | 'tracker';
+  onTabChange?: (tab: string) => void;
 }
 
 const QUESTION_LABELS: Record<string, string> = {
@@ -25,7 +28,8 @@ const QUESTION_LABELS: Record<string, string> = {
   'empowered_least': 'Least empowered member behavior',
 };
 
-const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user }) => {
+const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, onTabChange }) => {
+  const toast = useToast();
   // Supabase hooks for team data
   const { team: supabaseTeam, loading: teamLoading } = useTeam(user.id);
   const { tasks: supabaseTasks, templates: taskTemplates, loading: tasksLoading, toggleTaskCompletion } = useManagerTasks(user.id);
@@ -77,8 +81,17 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user }) => {
   }, [supabaseTeam, supabaseTasks, taskTemplates, mockHires, user.id]);
 
   // Navigation State
-  const [showWelcomeGuide, setShowWelcomeGuide] = useState(true);
-  const [activeTab, setActiveTab] = useState<'team' | 'tracker'>('team');
+  const [showWelcomeGuide, setShowWelcomeGuide] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('manager_welcome_dismissed') !== 'true';
+    }
+    return true;
+  });
+  const [activeTab, setActiveTabRaw] = useState<'team' | 'tracker'>(initialTab ?? 'team');
+  const setActiveTab = (tab: 'team' | 'tracker') => {
+    setActiveTabRaw(tab);
+    onTabChange?.(tab);
+  };
 
   // Calendar State (Defaults to Jan 5 2026 to align with mock data)
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date(2026, 0, 5)); 
@@ -194,7 +207,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user }) => {
   const upcomingTasks = getWeeklyTasks();
 
   const handleSlackNudge = (name: string) => {
-    alert(`Slack reminder sent to ${name}: "Hi! Checking in on your workbook progress."`);
+    toast.success(`Slack reminder sent to ${name}: "Hi! Checking in on your workbook progress."`);
   };
 
   const handleGenerateNudge = async (hire: NewHireProfile) => {
@@ -228,7 +241,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user }) => {
   const handleSaveComment = (hire: NewHireProfile, questionKey: string) => {
     if (!hire.workbookComments) hire.workbookComments = {};
     hire.workbookComments[questionKey] = commentInputs[questionKey];
-    alert("Comment saved!");
+    toast.success("Comment saved!");
     setCommentInputs(prev => ({...prev})); 
   };
 
@@ -243,7 +256,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user }) => {
     };
     hire.customPrompts.unshift(newPrompt);
     setNewPromptText('');
-    alert(`Question added to ${hire.name.split(' ')[0]}'s workbook.`);
+    toast.success(`Question added to ${hire.name.split(' ')[0]}'s workbook.`);
     setViewingHire({...hire});
   };
 
@@ -262,7 +275,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user }) => {
       spread: 70,
       origin: { y: 0.6 }
     });
-    alert(`Shoutout sent to ${hire.name}!`);
+    toast.success(`Shoutout sent to ${hire.name}!`);
     setShoutoutMessage('');
     setIsSendingShoutout(false);
   };
@@ -289,7 +302,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user }) => {
       const module = hire.modules.find(m => m.id === reassigningTask.moduleId);
       if (module) {
         module.host = selectedManager.name;
-        alert(`Successfully reassigned "${module.title}" to ${selectedManager.name}.`);
+        toast.success(`Successfully reassigned "${module.title}" to ${selectedManager.name}.`);
       }
     }
     setReassigningTask(null);
@@ -365,7 +378,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user }) => {
                         "Great managers don't just manage tasks, they empower growth."
                      </p>
                      <button 
-                      onClick={() => { setShowWelcomeGuide(false); window.scrollTo(0, 0); }}
+                      onClick={() => { localStorage.setItem('manager_welcome_dismissed', 'true'); setShowWelcomeGuide(false); window.scrollTo(0, 0); }}
                       className="bg-[#FDD344] text-[#013E3F] px-12 py-4 rounded-lg font-bold uppercase tracking-widest text-sm hover:bg-[#ffe175] transition-all transform hover:scale-105 shadow-xl flex items-center gap-3"
                     >
                       Get Started! <ArrowRight className="w-5 h-5" />
@@ -1088,7 +1101,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user }) => {
               />
               <div className="mt-6 flex justify-end gap-3">
                 <button onClick={() => setSelectedHireForEmail(null)} className="px-5 py-2.5 text-sm font-medium text-[#013E3F]/70 hover:text-[#013E3F] transition-colors">Cancel</button>
-                <button onClick={() => {alert("Message sent!"); setSelectedHireForEmail(null);}} className="px-5 py-2.5 text-sm font-bold bg-[#013E3F] text-[#F3EEE7] hover:bg-[#013E3F]/90 rounded-lg shadow-lg shadow-[#013E3F]/20 flex items-center gap-2">
+                <button onClick={() => {toast.success("Message sent!"); setSelectedHireForEmail(null);}} className="px-5 py-2.5 text-sm font-bold bg-[#013E3F] text-[#F3EEE7] hover:bg-[#013E3F]/90 rounded-lg shadow-lg shadow-[#013E3F]/20 flex items-center gap-2">
                    Send Message <ChevronRight className="w-3 h-3" />
                 </button>
               </div>

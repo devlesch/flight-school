@@ -3,6 +3,7 @@ import type { TrainingModule, UserModule } from '../types/database';
 import {
   getModulesWithProgress,
   markModuleComplete,
+  markModuleIncomplete,
   toggleModuleLike,
   updateModuleProgress,
 } from '../services/moduleService';
@@ -17,6 +18,7 @@ export interface UseModulesReturn {
   error: string | null;
   refetch: () => Promise<void>;
   markComplete: (moduleId: string, score?: number) => Promise<void>;
+  markIncomplete: (moduleId: string) => Promise<void>;
   toggleLike: (moduleId: string, liked: boolean) => Promise<void>;
   updateProgress: (moduleId: string, updates: Partial<UserModule>) => Promise<void>;
 }
@@ -67,6 +69,19 @@ export function useModules(userId: string | undefined): UseModulesReturn {
     }
   };
 
+  const handleMarkIncomplete = async (moduleId: string) => {
+    if (!userId) return;
+
+    const result = await markModuleIncomplete(userId, moduleId);
+    if (result) {
+      setModules(prev =>
+        prev.map(m =>
+          m.id === moduleId ? { ...m, progress: result } : m
+        )
+      );
+    }
+  };
+
   const handleToggleLike = async (moduleId: string, liked: boolean) => {
     if (!userId) return;
 
@@ -99,6 +114,7 @@ export function useModules(userId: string | undefined): UseModulesReturn {
     error,
     refetch: fetchModules,
     markComplete: handleMarkComplete,
+    markIncomplete: handleMarkIncomplete,
     toggleLike: handleToggleLike,
     updateProgress: handleUpdateProgress,
   };

@@ -1,0 +1,52 @@
+{
+  "track_id": "workflow-task-form_20260302",
+  "type": "feature",
+  "status": "planned",
+  "priority": "high",
+  "depends_on": [],
+  "estimated_hours": null,
+  "created_at": "2026-03-02T00:00:00Z",
+  "updated_at": "2026-03-02T00:00:00Z",
+  "description": "Upload Task Form — Wire Up & Extend",
+  "has_design": true,
+  "threads": [
+    {
+      "id": "newtrack-20260302",
+      "action": "newtrack",
+      "timestamp": "2026-03-02T00:00:00Z"
+    }
+  ],
+  "artifacts": {
+    "design": true,
+    "spec": true,
+    "plan": true,
+    "beads": false
+  },
+  "workflow": {
+    "state": "TRACKED",
+    "history": [
+      {"state": "INIT", "at": "2026-03-02T00:00:00Z", "command": "newtrack"},
+      {"state": "TRACKED", "at": "2026-03-02T00:00:00Z", "command": "newtrack"}
+    ],
+    "branch": "feat/workflow-task-form_20260302",
+    "archived": false,
+    "keep": false
+  },
+  "generation": {
+    "status": "complete",
+    "specCreatedAt": "2026-03-02T00:00:00Z",
+    "planCreatedAt": "2026-03-02T00:00:00Z",
+    "rbCompletedAt": null
+  },
+  "beads": {
+    "status": "pending",
+    "epicId": null,
+    "epics": [],
+    "issues": [],
+    "planTasks": {},
+    "beadToTask": {},
+    "crossTrackDeps": [],
+    "reviewStatus": null,
+    "reviewedAt": null
+  }
+}

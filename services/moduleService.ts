@@ -2,6 +2,48 @@ import { supabase } from '../lib/supabase';
 import type { TrainingModule, UserModule } from '../types/database';
 
 /**
+ * Create a new training module definition
+ */
+export async function createModule(data: TrainingModule['Insert']): Promise<TrainingModule | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: created, error } = await (supabase as any)
+    .from('training_modules')
+    .insert(data)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating module:', error.message);
+    return null;
+  }
+
+  return created as TrainingModule;
+}
+
+/**
+ * Update an existing training module definition
+ */
+export async function updateModule(
+  id: string,
+  data: TrainingModule['Update']
+): Promise<TrainingModule | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: updated, error } = await (supabase as any)
+    .from('training_modules')
+    .update(data)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating module:', error.message);
+    return null;
+  }
+
+  return updated as TrainingModule;
+}
+
+/**
  * Get all training module definitions
  */
 export async function getModules(): Promise<TrainingModule[]> {
@@ -16,6 +58,23 @@ export async function getModules(): Promise<TrainingModule[]> {
   }
 
   return data as TrainingModule[];
+}
+
+/**
+ * Get user_modules rows for multiple users in a single query
+ */
+export async function getUserModulesBatch(userIds: string[]): Promise<UserModule[]> {
+  if (userIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('user_modules')
+    .select('*')
+    .in('user_id', userIds);
+
+  if (error) {
+    console.error('Error fetching batch user modules:', error.message);
+    return [];
+  }
+  return data as UserModule[];
 }
 
 /**
@@ -78,8 +137,10 @@ export async function updateModuleProgress(
   if (existingRecord) {
     // Update existing record
     const updateData: Record<string, unknown> = { ...updates };
-    if (updates.completed) {
+    if (updates.completed === true) {
       updateData.completed_at = new Date().toISOString();
+    } else if (updates.completed === false) {
+      updateData.completed_at = null;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -103,8 +164,10 @@ export async function updateModuleProgress(
       module_id: moduleId,
       ...updates,
     };
-    if (updates.completed) {
+    if (updates.completed === true) {
       insertData.completed_at = new Date().toISOString();
+    } else if (updates.completed === false) {
+      insertData.completed_at = null;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -135,6 +198,16 @@ export async function markModuleComplete(
     completed: true,
     score,
   });
+}
+
+/**
+ * Mark a module as incomplete
+ */
+export async function markModuleIncomplete(
+  userId: string,
+  moduleId: string
+): Promise<UserModule | null> {
+  return updateModuleProgress(userId, moduleId, { completed: false });
 }
 
 /**
