@@ -1,7 +1,9 @@
 import React from 'react';
 import { UserRole } from '../types';
 import type { User } from '../types';
+import type { Profile } from '../types/database';
 import type { AdminViewMode } from './AdminDashboard';
+import ImpersonationPicker from './ImpersonationPicker';
 import { LayoutDashboard, Users, BookOpen, LogOut, ClipboardList, Calendar, MessageSquare, PieChart, Settings, ChevronRight, ListTodo } from 'lucide-react';
 
 const INDUSTRIOUS_LOGO_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 60'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='serif' font-weight='bold' font-size='32' fill='%23F3EEE7' letter-spacing='4'%3EINDUSTRIOUS%3C/text%3E%3C/svg%3E";
@@ -14,9 +16,12 @@ interface SidebarProps {
   onViewSwitch: (view: UserRole) => void;
   onAdminViewModeChange: (mode: AdminViewMode) => void;
   onLogout: () => void;
+  isAdmin?: boolean;
+  isImpersonating?: boolean;
+  onImpersonate?: (profile: Profile) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentUser, currentView, adminViewMode, onViewSwitch, onAdminViewModeChange, onLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentUser, currentView, adminViewMode, onViewSwitch, onAdminViewModeChange, onLogout, isAdmin = false, isImpersonating = false, onImpersonate }) => {
   return (
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#012d2e] border-r border-[#F3EEE7]/5 text-white transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-full flex flex-col overflow-hidden">
@@ -122,6 +127,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentUser, currentView, adm
                 <p className="text-[10px] text-[#F3EEE7]/40 truncate uppercase tracking-widest">{currentUser.role}</p>
               </div>
             </div>
+            {onImpersonate && (
+              <ImpersonationPicker
+                onSelectUser={onImpersonate}
+                isAdmin={isAdmin}
+                isImpersonating={isImpersonating}
+              />
+            )}
             <button
               onClick={onLogout}
               className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest text-[#F3EEE7]/50 hover:text-[#F3EEE7] py-3 rounded transition-colors group"
