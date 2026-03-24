@@ -107,3 +107,24 @@ export async function getProfilesByRole(role: string): Promise<Profile[]> {
 
   return data as Profile[];
 }
+
+const LEADERSHIP_ROLES = ['Regional Director', 'General Manager', 'Assistant General Manager'];
+
+/**
+ * Get leadership profiles for a region (RD, GM, AGM)
+ */
+export async function getLeadershipByRegion(region: string): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('region', region)
+    .in('standardized_role', LEADERSHIP_ROLES)
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching leadership by region:', error.message);
+    return [];
+  }
+
+  return (data || []) as Profile[];
+}
