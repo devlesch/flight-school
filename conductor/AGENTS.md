@@ -54,6 +54,16 @@ Contains reusable learnings from completed tracks.
 - **Domain restriction**: SQL trigger on `auth.users` can enforce email domain
 - **Session management**: `useAuth` hook subscribes to `onAuthStateChange` for reactive session state
 
+### Data Aggregation (Admin Dashboard)
+
+- **Compose existing hooks**: For admin-level aggregation, compose `useAllUsers()` + `getUserModulesBatch()` + `getModules()` rather than creating new Supabase queries
+- **Pure mapper function**: Separate data transformation (`adminStatsMapper.ts`) into independently testable pure functions. Takes database types in, returns app types out.
+- **Pre-computed stats**: Return both raw mapped data AND pre-computed KPI stats from hooks (`{ students, stats, loading, error, refetch }`)
+
+### AI Integration (Gemini)
+
+- **Markdown rendering for AI output**: Gemini returns markdown (bullets, bold). Parse with simple string splitting + `dangerouslySetInnerHTML` for bold — no full markdown library needed.
+
 ## Commands
 
 ### Supabase
@@ -61,6 +71,7 @@ Contains reusable learnings from completed tracks.
 - Run migrations in Supabase SQL Editor (Dashboard → SQL → paste file content)
 - Seed data: Run `supabase/seed.sql` after migrations
 - Configure OAuth: Dashboard → Authentication → Providers → Google
+- `getUserModulesBatch(userIds)` — batch-fetch user_modules for multiple users in one query
 
 ## Gotchas
 
@@ -70,3 +81,11 @@ Contains reusable learnings from completed tracks.
 - **RLS policy order**: More restrictive policies should come first; Supabase evaluates OR between policies
 - **Trigger SECURITY DEFINER**: Auto-profile trigger needs `SECURITY DEFINER` to insert into profiles table
 - **OAuth redirect**: Configure correct redirect URLs in both Supabase and Google Cloud Console
+- **Module due dates**: `user_modules.due_date` exists (nullable). Computed from `cohort.starting_date + training_module.day_offset` in cohortService.
+
+### Vite / Build
+
+- **Env vars via `define`**: Project uses `vite.config.ts` `define` to inject `process.env.GEMINI_API_KEY` at build time. Do NOT use `import.meta.env` for keys injected this way. For Vercel, fall back to `process.env` in the config since `loadEnv` only reads files.
+- **Worktree `.env.local`**: `vite.config.ts` uses `envDir: mainRoot` to share `.env.local` across git worktrees. Key lives in main repo root, not worktree.
+- **AdminDashboard OOM in tests**: Component is 47KB+ with 50+ icon imports — causes OOM in jsdom. Use source-level verification tests (file read + string assertions) instead of render tests.
+- **Mock data dual-import**: AdminDashboard can import both real hooks AND mock arrays simultaneously. When wiring real data, grep for ALL mock references across KPIs, drill-downs, modals, and regional computations.
