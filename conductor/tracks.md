@@ -19,6 +19,11 @@ Replace mock constants with cohort-based queries: manager → cohort_leaders →
 ### [~] Track: Upload Task Form — Wire Up & Extend
 *Link: [./conductor/tracks/workflow-task-form_20260302/](./conductor/tracks/workflow-task-form_20260302/)*
 
+### [~] Track: Cohort Page — Real Stats Per Leader Slot
+*Link: [./conductor/tracks/cohort-real-stats_20260324/](./conductor/tracks/cohort-real-stats_20260324/)*
+
+Replace hardcoded hash-formula stats (Progress, Hires, On Track, At Risk) in cohort leader slots with real data from useAdminDashboard().students.
+
 ### [x] Track: New Hire Dashboard — Real Data Integration
 *Link: [./conductor/tracks/newhire-real-data_20260323/](./conductor/tracks/newhire-real-data_20260323/)*
 

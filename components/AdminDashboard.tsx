@@ -261,6 +261,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     });
   }, [allUsers, students]);
 
+  // Pre-compute real stats per leader slot across all cohorts
+  const cohortSlotStats = useMemo(() => {
+    const statsMap = new Map<string, { hireCount: number; avgProgress: number; onTrack: number; atRisk: number }>();
+    for (const cohort of cohorts) {
+      const cohortStudents = students.filter(s => {
+        if (!s.startDate) return false;
+        return s.startDate >= cohort.hire_start_date && s.startDate <= cohort.hire_end_date;
+      });
+      for (const leader of cohort.cohort_leaders) {
+        const leaderStudents = cohortStudents.filter(s => s.managerId === leader.profile_id);
+        const hireCount = leaderStudents.length;
+        const avgProgress = hireCount > 0 ? Math.round(leaderStudents.reduce((sum, s) => sum + s.progress, 0) / hireCount) : 0;
+        const atRisk = leaderStudents.filter(isHireBehind).length;
+        const onTrack = hireCount - atRisk;
+        statsMap.set(`${cohort.id}-${leader.profile_id}`, { hireCount, avgProgress, onTrack, atRisk });
+      }
+    }
+    return statsMap;
+  }, [students, cohorts]);
+
   const selectedCohortData = useMemo(() => {
     if (!selectedCohort) return null;
     return cohorts.find(c => c.id === selectedCohort) || null;
@@ -1195,12 +1215,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                           const leader = leaderGrid[key];
                           if (leader) {
                             const profile = leader.profiles;
-                            // Hardcoded progress stats per slot
-                            const hash = (role.length * 7 + region.length * 13) % 30;
-                            const avgProgress = 55 + hash;
-                            const onTrack = 2 + (hash % 3);
-                            const behind = hash % 2;
-                            const hireCount = onTrack + behind;
+                            // Real stats from useAdminDashboard().students
+                            const slotStats = selectedCohort ? cohortSlotStats.get(`${selectedCohort}-${profile.id}`) : undefined;
+                            const avgProgress = slotStats?.avgProgress ?? 0;
+                            const onTrack = slotStats?.onTrack ?? 0;
+                            const behind = slotStats?.atRisk ?? 0;
+                            const hireCount = slotStats?.hireCount ?? 0;
                             return (
                               <div
                                 key={role}
