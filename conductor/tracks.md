@@ -19,11 +19,6 @@ Replace mock constants with cohort-based queries: manager → cohort_leaders →
 ### [~] Track: Upload Task Form — Wire Up & Extend
 *Link: [./conductor/tracks/workflow-task-form_20260302/](./conductor/tracks/workflow-task-form_20260302/)*
 
-### [~] Track: Admin Dashboard — Real Data & AI Analytics
-*Link: [./conductor/tracks/admin-dashboard-data_20260324/](./conductor/tracks/admin-dashboard-data_20260324/)*
-
-Wire Admin Dashboard KPIs (Active Hires, Avg Progress, At Risk) and Gemini AI analytics to real Supabase data. Remove mock data imports from constants.ts.
-
 ### [x] Track: New Hire Dashboard — Real Data Integration
 *Link: [./conductor/tracks/newhire-real-data_20260323/](./conductor/tracks/newhire-real-data_20260323/)*
 
@@ -40,3 +35,8 @@ Connect to Supabase for authentication (Google OAuth) and database persistence. 
 
 ### [x] Track: Add comprehensive test coverage for core dashboard components
 *Link: [./conductor/archive/test-coverage_20260131/](./conductor/archive/test-coverage_20260131/)*
+
+### [x] Track: Admin Dashboard — Real Data & AI Analytics
+*Link: [./conductor/archive/admin-dashboard-data_20260324/](./conductor/archive/admin-dashboard-data_20260324/)*
+
+Wire Admin Dashboard KPIs (Active Hires, Avg Progress, At Risk) and Gemini AI analytics to real Supabase data. Remove mock data imports from constants.ts.

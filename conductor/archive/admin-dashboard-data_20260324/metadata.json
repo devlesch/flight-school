@@ -1,7 +1,7 @@
 {
   "track_id": "admin-dashboard-data_20260324",
   "type": "feature",
-  "status": "planned",
+  "status": "complete",
   "priority": "medium",
   "depends_on": [],
   "estimated_hours": null,
@@ -23,13 +23,14 @@
     "beads": false
   },
   "workflow": {
-    "state": "TRACKED",
+    "state": "ARCHIVED",
     "history": [
       {"state": "INIT", "at": "2026-03-24T00:00:00Z", "command": "newtrack"},
-      {"state": "TRACKED", "at": "2026-03-24T00:00:00Z", "command": "newtrack"}
+      {"state": "TRACKED", "at": "2026-03-24T00:00:00Z", "command": "newtrack"},
+      {"state": "ARCHIVED", "at": "2026-03-24T00:00:00Z", "command": "finish"}
     ],
     "branch": "hilarious-thumb",
-    "archived": false,
+    "archived": true,
     "keep": false
   },
   "generation": {

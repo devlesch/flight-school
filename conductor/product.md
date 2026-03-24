@@ -56,3 +56,4 @@ The "Flight School" concept positions onboarding as a transformative journey:
 ## Shipped Features
 
 - [test-coverage_20260131] Comprehensive test coverage for core dashboard components (completed 2026-01-31)
+- [admin-dashboard-data_20260324] Admin Dashboard KPIs and AI analytics wired to real Supabase data (completed 2026-03-24)
