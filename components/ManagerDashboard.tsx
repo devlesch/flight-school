@@ -791,13 +791,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                    </div>
                 </div>
                 <div className="flex items-center gap-2">
-                   <button 
-                     onClick={() => setIsSendingShoutout(!isSendingShoutout)}
-                     className={`p-2 rounded-full transition-colors ${isSendingShoutout ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#013E3F]/40 hover:bg-[#F3EEE7] hover:text-[#013E3F]'}`}
-                     title="Give Shoutout"
-                   >
-                     <Megaphone className="w-5 h-5" />
-                   </button>
                    <button onClick={() => setViewingHire(null)} className="text-[#013E3F]/40 hover:text-[#013E3F] p-1 rounded-full hover:bg-[#F3EEE7]/50"><X className="w-6 h-6" /></button>
                 </div>
              </div>
