@@ -80,3 +80,21 @@ export async function updateCurrentProfile(
 
   return updateProfile(user.id, updates);
 }
+
+/**
+ * Delete a profile by user ID
+ */
+export async function deleteProfile(userId: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('profiles')
+    .delete()
+    .eq('id', userId);
+
+  if (error) {
+    console.error('Error deleting profile:', error.message);
+    return false;
+  }
+
+  return true;
+}
