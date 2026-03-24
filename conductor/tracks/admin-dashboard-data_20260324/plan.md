@@ -41,21 +41,21 @@ Build the pure function that transforms Supabase data shapes into `NewHireProfil
 
 Compose existing hooks with the mapper to provide a single data source for AdminDashboard.
 
-- [ ] Task 2.1: Write unit tests for `useAdminDashboard()`
-  - [ ] Test: returns loading=true initially, then loading=false with data
-  - [ ] Test: returns correct students array (mapped NewHireProfile[])
-  - [ ] Test: returns correct stats (activeCount, avgProgress, atRiskCount)
-  - [ ] Test: returns error state when useAllUsers fails
-  - [ ] Test: returns error state when getUserModulesBatch fails
-  - [ ] Test: refetch triggers fresh data load
-  - [ ] Test: handles empty users list gracefully
+- [x] Task 2.1: Write unit tests for `useAdminDashboard()`
+  - [x] Test: returns loading=true initially, then loading=false with data
+  - [x] Test: returns correct students array (mapped NewHireProfile[])
+  - [x] Test: returns correct stats (activeCount, avgProgress, atRiskCount)
+  - [x] Test: returns error state when useAllUsers fails
+  - [x] Test: returns error state when getUserModulesBatch fails
+  - [x] Test: refetch triggers fresh data load
+  - [x] Test: handles empty users list gracefully
 
-- [ ] Task 2.2: Implement `hooks/useAdminDashboard.ts`
-  - [ ] Compose useAllUsers() for profiles
-  - [ ] Call getUserModulesBatch(userIds) with training module join
-  - [ ] Pass results through mapToNewHireProfiles()
-  - [ ] Compute stats via computeAdminStats()
-  - [ ] Return { students, stats, loading, error, refetch }
+- [x] Task 2.2: Implement `hooks/useAdminDashboard.ts`
+  - [x] Compose useAllUsers() for profiles
+  - [x] Call getUserModulesBatch(userIds) with training module join
+  - [x] Pass results through mapToNewHireProfiles()
+  - [x] Compute stats via computeAdminStats()
+  - [x] Return { students, stats, loading, error, refetch }
 
 - [ ] Task 2.3: Conductor - User Manual Verification 'Phase 2: Admin Dashboard Hook' (Protocol in workflow.md)
 
