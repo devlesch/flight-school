@@ -9,7 +9,7 @@ This file tracks all major tracks for the Industrious Flight School project. Eac
 ### [~] Track: Upload Task Form — Wire Up & Extend
 *Link: [./conductor/tracks/workflow-task-form_20260302/](./conductor/tracks/workflow-task-form_20260302/)*
 
-### [~] Track: New Hire Dashboard — Real Data Integration
+### [x] Track: New Hire Dashboard — Real Data Integration
 *Link: [./conductor/tracks/newhire-real-data_20260323/](./conductor/tracks/newhire-real-data_20260323/)*
 
 Replace mock data (MANAGERS, NEW_HIRES arrays) in NewHireDashboard with real Supabase data. Add useLeadershipTeam hook, reuse useProfile for manager lookup, remove mock imports.

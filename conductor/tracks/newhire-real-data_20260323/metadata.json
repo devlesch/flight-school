@@ -1,7 +1,7 @@
 {
   "track_id": "newhire-real-data_20260323",
   "type": "feature",
-  "status": "planned",
+  "status": "done",
   "priority": "medium",
   "depends_on": [],
   "estimated_hours": null,
@@ -23,7 +23,7 @@
     "beads": false
   },
   "workflow": {
-    "state": "IMPLEMENTING",
+    "state": "DONE",
     "history": [
       {
         "state": "INIT",
@@ -37,6 +37,11 @@
       },
       {
         "state": "IMPLEMENTING",
+        "at": "2026-03-24T00:00:00Z",
+        "command": "implement"
+      },
+      {
+        "state": "DONE",
         "at": "2026-03-24T00:00:00Z",
         "command": "implement"
       }
