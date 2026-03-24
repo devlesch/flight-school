@@ -16,30 +16,46 @@
 - [x] Verify all tests from 1.1 pass
 
 ### Task 1.3: Conductor — User Manual Verification 'Phase 1' (Protocol in workflow.md)
+- [x] All phase tasks completed with commit 7e6b4cb
+- [x] New tests pass (4/4)
+- [x] Pre-existing test failures unrelated (missing Supabase env vars)
 
 ---
 
 ## Phase 2: Hook Layer — useLeadershipTeam
 
 ### Task 2.1: Write tests for `useLeadershipTeam` hook
-- [ ] Create `tests/unit/hooks/useLeadershipTeam.test.ts`
-- [ ] Test: calls `getLeadershipByRegion` with provided region
-- [ ] Test: returns `{ leaders, loading, error }` with correct types
-- [ ] Test: maps profiles to `{ profile, roleLabel }` using `standardized_role`
-- [ ] Test: returns empty leaders array when region is null (no fetch)
-- [ ] Test: returns empty leaders array when service returns empty
-- [ ] Test: sets error state on service failure
+- [x] Create `tests/unit/useLeadershipTeam.test.ts`
+- [x] Test: calls `getLeadershipByRegion` with provided region
+- [x] Test: returns `{ leaders, loading, error }` with correct types
+- [x] Test: maps profiles to `{ profile, roleLabel }` using `standardized_role`
+- [x] Test: returns empty leaders array when region is null (no fetch)
+- [x] Test: returns empty leaders array when service returns empty
+- [x] Test: sets error state on service failure
+
+### Task 2.1b: Write tests for `useProfileById` hook (added — useProfile can't fetch by arbitrary ID)
+- [x] Create `tests/unit/useProfileById.test.ts`
+- [x] Test: fetches profile by ID
+- [x] Test: returns null when userId is null/undefined
+- [x] Test: sets error state on service failure
 
 ### Task 2.2: Implement `useLeadershipTeam` hook
-- [ ] Create `hooks/useLeadershipTeam.ts`
-- [ ] Follow existing hook pattern: `useState` + `useEffect` + `useCallback`
-- [ ] Import `getLeadershipByRegion` from `teamService`
-- [ ] Return `{ leaders: LeaderProfile[], loading: boolean, error: string | null }`
-- [ ] Map each profile to `{ profile, roleLabel: profile.standardized_role }`
-- [ ] Skip fetch when region is null/undefined
-- [ ] Verify all tests from 2.1 pass
+- [x] Create `hooks/useLeadershipTeam.ts`
+- [x] Follow existing hook pattern: `useState` + `useEffect` + `useCallback`
+- [x] Import `getLeadershipByRegion` from `teamService`
+- [x] Return `{ leaders: LeaderProfile[], loading: boolean, error: string | null }`
+- [x] Map each profile to `{ profile, roleLabel: profile.standardized_role }`
+- [x] Skip fetch when region is null/undefined
+- [x] Verify all tests pass
+
+### Task 2.2b: Implement `useProfileById` hook (added)
+- [x] Create `hooks/useProfileById.ts`
+- [x] Wraps `getProfile(userId)` from profileService
+- [x] Verify all tests pass
 
 ### Task 2.3: Conductor — User Manual Verification 'Phase 2' (Protocol in workflow.md)
+- [x] All phase tasks completed
+- [x] 10 hook tests pass (6 leadership + 4 profileById)
 
 ---
 
