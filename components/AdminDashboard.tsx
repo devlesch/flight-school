@@ -279,7 +279,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     if (!selectedSlotRole || !selectedSlotRegion) return [];
     return allUsers.filter(u => {
       if (u.standardized_role !== selectedSlotRole || u.region !== selectedSlotRegion) return false;
-      if (selectedCohortData && u.start_date) {
+      // Only New Hires belong in cohorts — exclude Managers and Admins
+      if (u.role !== 'New Hire') return false;
+      // Exclude profiles without a start_date — they can't be cohort members
+      if (!u.start_date) return false;
+      if (selectedCohortData) {
         if (u.start_date < selectedCohortData.hire_start_date || u.start_date > selectedCohortData.hire_end_date) return false;
       }
       return true;

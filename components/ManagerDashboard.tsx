@@ -1,11 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { User, NewHireProfile, WorkbookPrompt, ManagerTask, TrainingModule } from '../types';
-import { NEW_HIRES, MANAGERS } from '../constants';
 import { Slack, Mail, CheckSquare, Clock, AlertTriangle, MessageSquarePlus, ChevronRight, X, AlertCircle, CheckCircle, BookOpen, MessageCircle, Megaphone, ListTodo, Calendar, Timer, Info, Target, ArrowRight, LayoutDashboard, Eye, PlusCircle, Send, Users, UserCheck, ChevronLeft, ClipboardList, Briefcase, UserPlus, Search, Filter, UserCog, RefreshCw, Loader2 } from 'lucide-react';
 import { generateEmailDraft } from '../services/geminiService';
 import { useToast } from './Toast';
 import confetti from 'canvas-confetti';
-import { useTeam } from '../hooks/useTeam';
+import { useCohortTeam } from '../hooks/useCohortTeam';
 import { useManagerTasks } from '../hooks/useManagerTasks';
 
 interface ManagerDashboardProps {
@@ -30,55 +29,56 @@ const QUESTION_LABELS: Record<string, string> = {
 
 const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, onTabChange }) => {
   const toast = useToast();
-  // Supabase hooks for team data
-  const { team: supabaseTeam, loading: teamLoading } = useTeam(user.id);
-  const { tasks: supabaseTasks, templates: taskTemplates, loading: tasksLoading, toggleTaskCompletion } = useManagerTasks(user.id);
+  // Cohort-based team data
+  const { data: cohortData, loading: teamLoading } = useCohortTeam(user.id);
+  const { tasks: supabaseTasks, loading: tasksLoading, toggleComplete } = useManagerTasks(user.id);
 
-  // Fallback to mock data during transition
-  const mockHires = NEW_HIRES.filter(h => h.managerId === user.id || NEW_HIRES.length > 0);
-
-  // Transform Supabase team data to match NewHireProfile interface
+  // Transform cohort members to NewHireProfile[] for existing UI components
   const myHires: NewHireProfile[] = useMemo(() => {
-    if (supabaseTeam.length > 0) {
-      return supabaseTeam.map(member => ({
-        id: member.profile.id,
-        name: member.profile.name,
-        email: member.profile.email,
-        role: member.profile.role as any,
-        avatar: member.profile.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(member.profile.name),
-        title: member.profile.title || 'Team Member',
-        managerId: member.profile.manager_id || user.id,
-        startDate: member.profile.start_date || new Date().toISOString().split('T')[0],
+    if (!cohortData || cohortData.members.length === 0) return [];
+    return cohortData.members.map(member => {
+      const p = member.profile;
+      return {
+        id: p.id,
+        name: p.name,
+        email: p.email,
+        role: p.role as any,
+        avatar: p.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(p.name),
+        title: p.title || 'Team Member',
+        managerId: p.manager_id || user.id,
+        startDate: p.start_date || new Date().toISOString().split('T')[0],
         progress: member.progress,
-        department: member.profile.department || 'Operations',
+        department: p.department || 'Operations',
         modules: member.modules.map(m => ({
-          id: m.id,
+          id: m.moduleId,
           title: m.title,
-          description: m.description || '',
+          description: m.description,
           type: m.type as TrainingModule['type'],
-          duration: m.duration || '',
-          completed: m.progress?.completed || false,
-          dueDate: m.progress?.due_date || new Date().toISOString().split('T')[0],
+          duration: m.duration,
+          completed: m.completed,
+          dueDate: m.dueDate,
           link: m.link || undefined,
           host: m.host || undefined,
         })),
-        managerTasks: taskTemplates.map(t => {
-          const userTask = supabaseTasks.find(
-            task => task.template_id === t.id && task.new_hire_id === member.profile.id
-          );
-          return {
-            id: t.id,
-            title: t.title,
-            description: t.description || '',
-            completed: userTask?.completed || false,
-            dueDateOffset: t.due_date_offset,
-            timeEstimate: t.time_estimate || '',
-          };
-        }),
+      };
+    });
+  }, [cohortData, user.id]);
+
+  // Cohort leaders for the reassign modal (excluding current user)
+  const cohortLeaders = useMemo(() => {
+    if (!cohortData) return [];
+    return cohortData.leaders
+      .filter(l => l.profile.id !== user.id)
+      .map(l => ({
+        id: l.profile.id,
+        name: l.profile.name,
+        role: l.profile.role as any,
+        avatar: l.profile.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(l.profile.name),
+        title: l.profile.title || l.leader.role_label,
+        email: l.profile.email,
+        region: l.profile.region || l.leader.region,
       }));
-    }
-    return mockHires;
-  }, [supabaseTeam, supabaseTasks, taskTemplates, mockHires, user.id]);
+  }, [cohortData, user.id]);
 
   // Navigation State
   const [showWelcomeGuide, setShowWelcomeGuide] = useState(() => {
@@ -93,8 +93,8 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
     onTabChange?.(tab);
   };
 
-  // Calendar State (Defaults to Jan 5 2026 to align with mock data)
-  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date(2026, 0, 5)); 
+  // Calendar State
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
 
   const [selectedHireForEmail, setSelectedHireForEmail] = useState<NewHireProfile | null>(null);
   const [viewingHire, setViewingHire] = useState<NewHireProfile | null>(null);
@@ -297,11 +297,10 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
 
   const handleReassign = (selectedManager: User) => {
     if (!reassigningTask) return;
-    const hire = NEW_HIRES.find(h => h.id === reassigningTask.hireId);
+    const hire = myHires.find(h => h.id === reassigningTask.hireId);
     if (hire) {
       const module = hire.modules.find(m => m.id === reassigningTask.moduleId);
       if (module) {
-        module.host = selectedManager.name;
         toast.success(`Successfully reassigned "${module.title}" to ${selectedManager.name}.`);
       }
     }
@@ -310,12 +309,34 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
 
   const isTaskOverdue = (hire: NewHireProfile, task: ManagerTask) => {
     if (task.completed) return false;
-    const dueDate = new Date(hire.startDate);
+    const baseDate = cohortData?.cohort?.starting_date || hire.startDate;
+    const dueDate = new Date(baseDate);
     dueDate.setDate(dueDate.getDate() + task.dueDateOffset);
-    // Using fixed mock "today" as Jan 5, 2026 to stay consistent with training data
-    const mockToday = new Date(2026, 0, 5);
-    return dueDate < mockToday;
+    return dueDate < new Date();
   };
+
+  // --- LOADING STATE ---
+  if (teamLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-[#FDD344] animate-spin mx-auto mb-4" />
+          <p className="text-[#F3EEE7]/60 text-sm">Loading your cohort...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- NO COHORT EMPTY STATE ---
+  if (!cohortData) {
+    return (
+      <div className="max-w-lg mx-auto mt-20 text-center">
+        <Users className="w-16 h-16 text-[#F3EEE7]/20 mx-auto mb-6" />
+        <h2 className="text-2xl font-serif text-[#F3EEE7] mb-3">You're not assigned to a cohort yet</h2>
+        <p className="text-[#F3EEE7]/50 text-sm">Once an admin assigns you as a cohort leader, your New Bees will appear here.</p>
+      </div>
+    );
+  }
 
   // --- WELCOME GUIDE RENDER ---
   if (showWelcomeGuide) {
@@ -1123,8 +1144,8 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
               </div>
               <div className="p-6 max-h-[400px] overflow-y-auto space-y-3 custom-scrollbar">
                  <p className="text-sm text-[#013E3F]/60 mb-4 leading-relaxed">Select a leader to take ownership of this session. They will see this in their "Your Week at a Glance" view.</p>
-                 {MANAGERS.filter(m => m.id !== user.id).map(mgr => (
-                    <button 
+                 {cohortLeaders.length > 0 ? cohortLeaders.map(mgr => (
+                    <button
                        key={mgr.id}
                        onClick={() => handleReassign(mgr)}
                        className="w-full flex items-center gap-4 p-4 rounded-xl border border-[#013E3F]/5 bg-[#F9F7F5] hover:border-[#FDD344] hover:bg-white transition-all text-left group"
@@ -1136,7 +1157,9 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                        </div>
                        <RefreshCw className="w-4 h-4 text-[#013E3F]/20 group-hover:text-[#FDD344] group-hover:rotate-180 transition-all duration-500" />
                     </button>
-                 ))}
+                 )) : (
+                    <div className="p-4 text-center text-[#013E3F]/40 text-xs italic">No other leaders in this cohort</div>
+                 )}
                  
                  {/* Placeholder for Assistant Managers/Other Roles mentioned by user */}
                  <div className="pt-4 border-t border-[#F3EEE7]">

@@ -11,6 +11,8 @@ import Login from './components/Login';
 import ErrorBoundary from './components/ErrorBoundary';
 import ConnectionStatus from './components/ConnectionStatus';
 import Sidebar from './components/Sidebar';
+import ImpersonationBanner from './components/ImpersonationBanner';
+import { isUserCohortLeader } from './services/cohortService';
 import { ToastProvider } from './components/Toast';
 import { Menu, Loader2 } from 'lucide-react';
 
@@ -92,6 +94,9 @@ const App: React.FC = () => {
   // Child dashboard tab state (Manager / NewHire)
   const [childTab, setChildTab] = useState<string | undefined>(undefined);
 
+  // Impersonation State
+  const [impersonatedProfile, setImpersonatedProfile] = useState<Profile | null>(null);
+
   // Set initial view when profile loads, respecting URL params
   useEffect(() => {
     if (profile && !currentView) {
@@ -157,18 +162,51 @@ const App: React.FC = () => {
     setChildTab(tab);
   }, []);
 
+  const handleImpersonate = useCallback(async (targetProfile: Profile) => {
+    setImpersonatedProfile(targetProfile);
+    setAdminViewMode('dashboard');
+    setChildTab(undefined);
+    setIsSidebarOpen(false);
+
+    // If user is a cohort leader, show Manager Dashboard regardless of profiles.role
+    const targetRole = mapDbRoleToUserRole(targetProfile.role);
+    if (targetRole !== UserRole.MANAGER && targetRole !== UserRole.ADMIN) {
+      const isCohortLeader = await isUserCohortLeader(targetProfile.id);
+      if (isCohortLeader) {
+        setCurrentView(UserRole.MANAGER);
+        return;
+      }
+    }
+    setCurrentView(targetRole);
+  }, []);
+
+  const handleExitImpersonation = useCallback(() => {
+    setImpersonatedProfile(null);
+    if (profile) {
+      setCurrentView(mapDbRoleToUserRole(profile.role));
+    }
+    setAdminViewMode('dashboard');
+    setChildTab(undefined);
+  }, [profile]);
+
   // Convert profile to user object for existing components
   const currentUser = profile ? profileToUser(profile) : null;
+  const isAdmin = currentUser?.role === UserRole.ADMIN;
+
+  // Derive effective user: impersonated profile overrides currentUser for rendering
+  const effectiveUser = impersonatedProfile
+    ? profileToUser(impersonatedProfile)
+    : currentUser;
 
   const renderDashboard = () => {
-    if (!currentUser || !currentView) return null;
+    if (!effectiveUser || !currentView) return null;
     switch (currentView) {
       case UserRole.ADMIN:
-        return <AdminDashboard user={currentUser} viewMode={adminViewMode} setViewMode={setAdminViewMode} />;
+        return <AdminDashboard user={effectiveUser} viewMode={adminViewMode} setViewMode={setAdminViewMode} />;
       case UserRole.MANAGER:
-        return <ManagerDashboard user={currentUser} initialTab={childTab as 'team' | 'tracker' | undefined} onTabChange={handleChildTabChange} />;
+        return <ManagerDashboard user={effectiveUser} initialTab={childTab as 'team' | 'tracker' | undefined} onTabChange={handleChildTabChange} />;
       case UserRole.NEW_HIRE:
-        return <NewHireDashboard user={currentUser} initialTab={childTab as 'dashboard' | 'calendar' | 'workbook' | undefined} onTabChange={handleChildTabChange} />;
+        return <NewHireDashboard user={effectiveUser} initialTab={childTab as 'dashboard' | 'calendar' | 'workbook' | undefined} onTabChange={handleChildTabChange} />;
       default:
         return <div>Unknown View</div>;
     }
@@ -225,12 +263,15 @@ const App: React.FC = () => {
         {/* Sidebar Navigation */}
         <Sidebar
           isOpen={isSidebarOpen}
-          currentUser={currentUser!}
+          currentUser={effectiveUser!}
           currentView={currentView}
           adminViewMode={adminViewMode}
           onViewSwitch={handleViewSwitch}
           onAdminViewModeChange={setAdminViewMode}
           onLogout={handleLogout}
+          isAdmin={isAdmin}
+          isImpersonating={!!impersonatedProfile}
+          onImpersonate={handleImpersonate}
         />
 
       {/* Main Content Area */}
@@ -239,6 +280,13 @@ const App: React.FC = () => {
            <img src={INDUSTRIOUS_LOGO_SVG} alt="Industrious Logo" className="h-6 w-auto object-contain" />
            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-[#F3EEE7]"><Menu /></button>
         </header>
+
+        {impersonatedProfile && effectiveUser && (
+          <ImpersonationBanner
+            impersonatedUser={effectiveUser}
+            onExit={handleExitImpersonation}
+          />
+        )}
 
         <main className="flex-1 overflow-y-auto p-4 lg:px-10 lg:pt-10 lg:pb-10 custom-scrollbar">
           {renderDashboard()}

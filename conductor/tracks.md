@@ -6,6 +6,16 @@ This file tracks all major tracks for the Industrious Flight School project. Eac
 
 ## Active Tracks
 
+### [~] Track: Role-Based Sidebar Filtering & Admin Impersonation
+*Link: [./conductor/tracks/rbac-impersonation_20260322/](./conductor/tracks/rbac-impersonation_20260322/)*
+
+Add "View as..." impersonation mode for admins to preview role-filtered sidebar and dashboard experiences for any user.
+
+### [~] Track: Wire Manager Dashboard with Real Supabase Data
+*Link: [./conductor/tracks/manager-real-data_20260323/](./conductor/tracks/manager-real-data_20260323/)*
+
+Replace mock constants with cohort-based queries: manager → cohort_leaders → cohort → students by date range, real progress, real dates, real reassign modal.
+
 ### [~] Track: Upload Task Form — Wire Up & Extend
 *Link: [./conductor/tracks/workflow-task-form_20260302/](./conductor/tracks/workflow-task-form_20260302/)*
 
