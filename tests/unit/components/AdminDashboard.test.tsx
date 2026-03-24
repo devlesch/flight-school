@@ -3,6 +3,16 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import AdminDashboard, { AdminViewMode } from '../../../components/AdminDashboard';
 import { testAdmin } from '../../fixtures';
 
+// Mock Toast
+vi.mock('../../../components/Toast', () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  }),
+  ToastProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 // Mock profileService
 const mockUpdateProfile = vi.fn().mockResolvedValue({ id: 'profile-1' });
 vi.mock('../../../services/profileService', () => ({
@@ -57,6 +67,17 @@ const testProfile = {
 vi.mock('../../../hooks/useTeam', () => ({
   useAllUsers: () => ({
     users: [testProfile],
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
+// Mock useAdminDashboard
+vi.mock('../../../hooks/useAdminDashboard', () => ({
+  useAdminDashboard: () => ({
+    students: [],
+    stats: { activeCount: 0, avgProgress: 0, atRiskCount: 0 },
     loading: false,
     error: null,
     refetch: vi.fn(),

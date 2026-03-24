@@ -7,9 +7,9 @@ let ai: GoogleGenAI | null = null;
 
 const getAI = () => {
   if (!ai) {
-    const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
     if (!apiKey) {
-      console.warn('Gemini API key not set - AI features disabled');
+      console.warn('Gemini API key not set - AI features disabled. Add VITE_GEMINI_API_KEY to .env.local');
       return null;
     }
     ai = new GoogleGenAI({ apiKey });

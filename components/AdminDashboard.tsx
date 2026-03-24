@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { NewHireProfile, User, CalendarEvent, TrainingModule, UserRole } from '../types';
 import type { Profile, TrainingModule as DbTrainingModule, ModuleType } from '../types/database';
-import { NEW_HIRES, MANAGERS, MOCK_TRAINING_MODULES, MANAGER_ONBOARDING_TASKS } from '../constants';
+// Mock imports removed — KPIs and AI analytics now use real Supabase data via useAdminDashboard()
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, LabelList, PieChart as RePieChart, Pie, Tooltip, LineChart, Line, AreaChart, Area } from 'recharts';
 import { Mail, Calendar, TrendingUp, CheckCircle, AlertCircle, FileText, Loader2, Wand2, UploadCloud, Video, ArrowRight, X, Users, Plus, Clock, MessageSquare, Zap, PieChart, Settings, Palette, UserCheck, Search, Send, ChevronLeft, ChevronRight, MessageCircle, Globe, AtSign, Filter, BarChart2, MousePointer2, Check, UserMinus, ArrowLeft, Slack, ClipboardCheck, Info, Target, LayoutDashboard, Star, ShieldCheck, UserCog, UserPlus, ZapOff, Activity, History, HelpCircle, FileUp, Building2, UserCircle, Save, Briefcase, RefreshCw, Edit3, BookOpen, Layers, UserPlus2, UserCheck2, HelpCircle as HelpIcon, Timer, ListTodo } from 'lucide-react';
 import { analyzeProgress, ExtractedHireData, generateManagerNotification, generateEmailDraft } from '../services/geminiService';
@@ -15,6 +15,7 @@ import { sendSlackDM } from '../services/slackService';
 import { useToast } from './Toast';
 import confetti from 'canvas-confetti';
 import { useAllUsers } from '../hooks/useTeam';
+import { useAdminDashboard } from '../hooks/useAdminDashboard';
 import { useCohorts } from '../hooks/useCohorts';
 import { supabase } from '../lib/supabase';
 
@@ -57,7 +58,9 @@ function getWeekBoundaries(startDateStr: string): { label: string; start: Date; 
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setViewMode }) => {
   const toast = useToast();
-  // Supabase hook for all users (admin view)
+  // Real data hook for dashboard KPIs and AI analytics
+  const { students, stats, loading: dashboardLoading, error: dashboardError, refetch: refetchDashboard } = useAdminDashboard();
+  // Supabase hook for all users (admin view - used for registry, comms, etc.)
   const { users: supabaseUsers, loading: usersLoading, refetch: refetchUsers } = useAllUsers();
   // Cohorts hook
   const { cohorts, loading: cohortsLoading, refetch: refetchCohorts } = useCohorts();
@@ -248,14 +251,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
 
   const regionalData = useMemo(() => {
     const regions = ['East', 'West', 'Central'];
+    const managerUsers = allUsers.filter(u => u.role === 'Manager');
     return regions.map(name => {
-      const managersInRegion = MANAGERS.filter(m => m.region === name);
+      const managersInRegion = managerUsers.filter(m => m.region === name);
       const managerIds = managersInRegion.map(m => m.id);
-      const hires = NEW_HIRES.filter(h => managerIds.includes(h.managerId));
+      const hires = students.filter(h => managerIds.includes(h.managerId));
       const behind = hires.filter(isHireBehind).length;
       return { name, enrolled: hires.length, behind, onTrack: hires.length - behind, managers: managersInRegion, hiresList: hires };
     });
-  }, []);
+  }, [allUsers, students]);
 
   const selectedCohortData = useMemo(() => {
     if (!selectedCohort) return null;
@@ -395,22 +399,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
 
   const handleManualHireSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newHireObj: NewHireProfile = {
-      id: `nh-${Date.now()}`,
-      name: `${manualHire.firstName} ${manualHire.lastName}`,
-      email: manualHire.email,
-      role: UserRole.NEW_HIRE,
-      title: manualHire.role,
-      avatar: `https://ui-avatars.com/api/?name=${manualHire.firstName}+${manualHire.lastName}&background=013E3F&color=F3EEE7`,
-      managerId: 'mgr-1',
-      startDate: manualHire.startDate,
-      progress: 0,
-      department: 'Operations',
-      modules: [...MOCK_TRAINING_MODULES],
-      managerTasks: MANAGER_ONBOARDING_TASKS.map(t => ({ ...t, completed: false })),
-    };
-    NEW_HIRES.push(newHireObj);
-    toast.success(`Success: ${newHireObj.name} created.`);
+    // Manual hire creation — use Workday Import for full onboarding setup
+    toast.success(`Success: ${manualHire.firstName} ${manualHire.lastName} created. Use Workday Import to assign training modules.`);
     setManualHire({ firstName: '', lastName: '', email: '', managerName: '', managerEmail: '', startDate: '', location: '', role: '', hasDirectReports: false });
   };
 
@@ -498,7 +488,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
-    const result = await analyzeProgress(NEW_HIRES);
+    const result = await analyzeProgress(students);
     setAnalysisResult(result);
     setAnalyzing(false);
   };
@@ -578,10 +568,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     return days;
   };
 
-  const behindEmployees = useMemo(() => NEW_HIRES.filter(isHireBehind), []);
-  const enrolledCount = NEW_HIRES.length;
-  const avgCompletion = Math.round(NEW_HIRES.reduce((a,c) => a + c.progress, 0) / NEW_HIRES.length);
-  const behindCount = behindEmployees.length;
+  const behindEmployees = useMemo(() => students.filter(isHireBehind), [students]);
+  const enrolledCount = stats.activeCount;
+  const avgCompletion = stats.avgProgress;
+  const behindCount = stats.atRiskCount;
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-20">
@@ -1421,7 +1411,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                        })()}
                      </div>
                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                       {NEW_HIRES.filter(h => h.managerId === selectedCohortManager.id).map(hire => (
+                       {students.filter(h => h.managerId === selectedCohortManager.id).map(hire => (
                          <div key={hire.id} onClick={() => setSelectedHireForDrilldown(hire)} className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 hover:border-[#FDD344] transition-all group cursor-pointer shadow-sm relative overflow-hidden">
                             <div className="flex items-center gap-4 mb-4"><img src={hire.avatar} className="w-12 h-12 rounded-full border border-[#013E3F]/10" /><div><h4 className="font-bold text-[#013E3F] text-lg leading-tight group-hover:text-[#FDD344] transition-colors">{hire.name}</h4><p className="text-[10px] uppercase font-bold text-[#013E3F]/40 tracking-wider">{hire.title}</p></div></div><div className="w-full bg-[#F3EEE7] h-2 rounded-full overflow-hidden mb-3"><div className={`h-full transition-all duration-500 ${isHireBehind(hire) ? 'bg-red-400' : 'bg-[#013E3F]'}`} style={{ width: `${hire.progress}%` }} /></div><div className="flex justify-between items-center"><div className="flex flex-col"><span className="text-[10px] font-bold uppercase opacity-30">Completion</span><span className="font-serif font-bold text-[#013E3F]">{hire.progress}%</span></div><button className="text-[9px] font-bold uppercase tracking-widest text-[#013E3F]/40 group-hover:text-[#013E3F] flex items-center gap-1">View Profile <ArrowRight className="w-3 h-3" /></button></div><div className="absolute right-0 top-0 w-24 h-24 bg-[#FDD344]/5 rounded-full -translate-y-12 translate-x-12 group-hover:scale-150 transition-transform duration-500"></div>
                          </div>
@@ -1835,7 +1825,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                   <div className="space-y-6">
                     <div className="bg-[#F3EEE7] border border-[#013E3F]/5 p-6 rounded-lg text-sm text-[#013E3F]">
                        <h4 className="font-bold text-lg mb-2 font-serif">Onboarding Path Completion Tracker</h4>
-                       <p className="text-[#013E3F]/70 mb-4">Track the tasks {MANAGERS.find(m => m.id === selectedHireForDrilldown.managerId)?.name || 'the manager'} is responsible for.</p>
+                       <p className="text-[#013E3F]/70 mb-4">Track the tasks {allUsers.find(u => u.id === selectedHireForDrilldown.managerId)?.name || 'the manager'} is responsible for.</p>
                        <div className="w-full bg-[#013E3F]/10 rounded-full h-2 mb-2">
                           <div className="bg-[#013E3F] h-2 rounded-full transition-all duration-500" style={{ width: `${Math.round(((selectedHireForDrilldown.managerTasks?.filter(t => t.completed).length || 0) / (selectedHireForDrilldown.managerTasks?.length || 1)) * 100)}%` }} />
                        </div>
@@ -2119,7 +2109,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       document.body)}
 
       {showEnrolledDrilldown && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"><div className="bg-white rounded-2xl max-w-lg w-full p-8 animate-in zoom-in-95 shadow-2xl"><div className="flex justify-between items-center mb-6"><h3 className="font-serif text-2xl text-[#013E3F]">Enrollment Detail</h3><button onClick={() => setShowEnrolledDrilldown(false)}><X className="w-5 h-5 text-[#013E3F]/40 hover:text-[#013E3F]"/></button></div><div className="max-h-[60vh] overflow-y-auto space-y-3">{(enrolledFilter === 'summary' ? NEW_HIRES : enrolledFilter === 'onTrack' ? NEW_HIRES.filter(h => !isHireBehind(h)) : NEW_HIRES.filter(isHireBehind)).map(hire => (<div key={hire.id} className="flex items-center justify-between p-4 bg-[#F9F7F5] border border-[#013E3F]/5 rounded-xl"><div className="flex items-center gap-3"><img src={hire.avatar} className="w-10 h-10 rounded-full border border-[#013E3F]/10" /><div><h4 className="font-bold text-[#013E3F] leading-tight">{hire.name}</h4><p className="text-[10px] uppercase font-bold text-[#013E3F]/40 tracking-wider">{hire.title}</p></div></div><div className="font-serif font-bold text-[#013E3F]">{hire.progress}%</div></div>))}</div></div></div>,
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"><div className="bg-white rounded-2xl max-w-lg w-full p-8 animate-in zoom-in-95 shadow-2xl"><div className="flex justify-between items-center mb-6"><h3 className="font-serif text-2xl text-[#013E3F]">Enrollment Detail</h3><button onClick={() => setShowEnrolledDrilldown(false)}><X className="w-5 h-5 text-[#013E3F]/40 hover:text-[#013E3F]"/></button></div><div className="max-h-[60vh] overflow-y-auto space-y-3">{(enrolledFilter === 'summary' ? students : enrolledFilter === 'onTrack' ? students.filter(h => !isHireBehind(h)) : students.filter(isHireBehind)).map(hire => (<div key={hire.id} className="flex items-center justify-between p-4 bg-[#F9F7F5] border border-[#013E3F]/5 rounded-xl"><div className="flex items-center gap-3"><img src={hire.avatar} className="w-10 h-10 rounded-full border border-[#013E3F]/10" /><div><h4 className="font-bold text-[#013E3F] leading-tight">{hire.name}</h4><p className="text-[10px] uppercase font-bold text-[#013E3F]/40 tracking-wider">{hire.title}</p></div></div><div className="font-serif font-bold text-[#013E3F]">{hire.progress}%</div></div>))}</div></div></div>,
       document.body)}
 
       {editingHireId && createPortal(
