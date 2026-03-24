@@ -78,7 +78,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [workflowSubTab, setWorkflowSubTab] = useState<'upload' | 'manual' | 'edit'>('edit');
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [importSuccess, setImportSuccess] = useState(false);
-  const [manualHire, setManualHire] = useState({ firstName: '', lastName: '', email: '', managerName: '', managerEmail: '', startDate: '', location: '', role: '', hasDirectReports: false });
+  const [manualHire, setManualHire] = useState({ firstName: '', lastName: '', email: '', startDate: '', location: '', role: '', department: '', region: '', userRole: 'New Hire' as UserRole, standardizedRole: '', managerId: '' });
   const [editingHireId, setEditingHireId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState({ name: '', role: '', managerId: '', email: '', startDate: '', department: '', region: '', location: '', userRole: 'New Hire' as UserRole, standardizedRole: '' });
   const [registryFilters, setRegistryFilters] = useState({ employee: '', role: '', manager: '', startDate: '', region: '', missingRegion: false, standardizedRole: '' });
@@ -426,11 +426,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     }
   };
 
-  const handleManualHireSubmit = (e: React.FormEvent) => {
+  const handleManualHireSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Manual hire creation — use Workday Import for full onboarding setup
-    toast.success(`Success: ${manualHire.firstName} ${manualHire.lastName} created. Use Workday Import to assign training modules.`);
-    setManualHire({ firstName: '', lastName: '', email: '', managerName: '', managerEmail: '', startDate: '', location: '', role: '', hasDirectReports: false });
+    try {
+      const fullName = `${manualHire.firstName} ${manualHire.lastName}`.trim();
+      const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(manualHire.firstName)}+${encodeURIComponent(manualHire.lastName)}&background=013E3F&color=F3EEE7`;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: insertError } = await (supabase as any)
+        .from('profiles')
+        .insert({
+          id: crypto.randomUUID(),
+          email: manualHire.email,
+          name: fullName,
+          role: manualHire.userRole,
+          avatar,
+          title: manualHire.role || null,
+          location: manualHire.location || null,
+          department: manualHire.department || null,
+          region: manualHire.region || null,
+          standardized_role: manualHire.standardizedRole || null,
+          manager_id: manualHire.managerId || null,
+          start_date: manualHire.startDate || null,
+          provisioned: true,
+        });
+
+      if (insertError) {
+        toast.error(`Failed to create member: ${insertError.message}`);
+        return;
+      }
+
+      await refetchUsers();
+      toast.success(`Success: ${fullName} created. Use Workday Import to assign training modules.`);
+      setManualHire({ firstName: '', lastName: '', email: '', startDate: '', location: '', role: '', department: '', region: '', userRole: 'New Hire' as UserRole, standardizedRole: '', managerId: '' });
+    } catch (err) {
+      toast.error(`Error creating member: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const handleUpdateHire = async (e: React.FormEvent) => {
@@ -745,19 +776,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                             <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Last Name</label><input required className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={manualHire.lastName} onChange={e => setManualHire({...manualHire, lastName: e.target.value})} /></div>
                          </div>
                          <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Email</label><input type="email" required className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={manualHire.email} onChange={e => setManualHire({...manualHire, email: e.target.value})} /></div>
-                         <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Role</label><input required className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={manualHire.role} onChange={e => setManualHire({...manualHire, role: e.target.value})} /></div>
+                         <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Role (Title)</label><input className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={manualHire.role} onChange={e => setManualHire({...manualHire, role: e.target.value})} /></div>
+                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Start Date</label><input type="date" required className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={manualHire.startDate} onChange={e => setManualHire({...manualHire, startDate: e.target.value})} /></div>
+                         </div>
                       </div>
                       <div className="space-y-6">
                          <h4 className="text-[11px] font-bold uppercase text-[#F3EEE7]/40 tracking-[3px] border-b border-[#F3EEE7]/10 pb-2">Logistics</h4>
                          <div className="grid grid-cols-2 gap-6">
-                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Manager Name</label><input required className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={manualHire.managerName} onChange={e => setManualHire({...manualHire, managerName: e.target.value})} /></div>
-                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Manager Email</label><input type="email" required className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={manualHire.managerEmail} onChange={e => setManualHire({...manualHire, managerEmail: e.target.value})} /></div>
+                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Department</label><input className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={manualHire.department} onChange={e => setManualHire({...manualHire, department: e.target.value})} /></div>
+                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Location</label><input className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={manualHire.location} onChange={e => setManualHire({...manualHire, location: e.target.value})} /></div>
                          </div>
                          <div className="grid grid-cols-2 gap-6">
-                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Start Date</label><input type="date" required className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={manualHire.startDate} onChange={e => setManualHire({...manualHire, startDate: e.target.value})} /></div>
-                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Location</label><input required className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={manualHire.location} onChange={e => setManualHire({...manualHire, location: e.target.value})} /></div>
+                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Region</label><select required className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2 text-[#F3EEE7]" value={manualHire.region} onChange={e => setManualHire({...manualHire, region: e.target.value})}><option value="">Select Region</option><option value="East">East</option><option value="Central">Central</option><option value="West">West</option></select></div>
+                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">System Role</label><select className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2 text-[#F3EEE7]" value={manualHire.userRole} onChange={e => setManualHire({...manualHire, userRole: e.target.value as UserRole})}><option value="New Hire">New Hire</option><option value="Manager">Manager</option><option value="Admin">Admin</option></select></div>
                          </div>
-                         <div className="flex items-center gap-4 pt-4"><button type="button" onClick={() => setManualHire({...manualHire, hasDirectReports: !manualHire.hasDirectReports})} className={`w-12 h-6 rounded-full relative flex items-center transition-colors ${manualHire.hasDirectReports ? 'bg-green-600' : 'bg-[#F3EEE7]/10'}`}><div className={`w-5 h-5 bg-white rounded-full transition-transform ${manualHire.hasDirectReports ? 'translate-x-6' : 'translate-x-1'}`} /></button><span className="text-xs font-bold text-[#F3EEE7]/70">This hire has direct reports</span></div>
+                         <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Assigned Manager</label><select className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2 text-[#F3EEE7]" value={manualHire.managerId} onChange={e => setManualHire({...manualHire, managerId: e.target.value})}><option value="">None</option>{allUsers.filter(u => u.role === 'Manager').map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
+                            <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Std. Role</label><select className="w-full bg-[#013E3F] border-b-2 border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2 text-[#F3EEE7]" value={manualHire.standardizedRole} onChange={e => setManualHire({...manualHire, standardizedRole: e.target.value})}><option value="">No Role</option><option value="MxA">MxA</option><option value="MxM">MxM</option><option value="AGM">AGM</option><option value="GM">GM</option><option value="RD">RD</option></select></div>
+                         </div>
                       </div>
                    </div>
                    <div className="pt-8 border-t border-[#F3EEE7]/10 flex justify-end"><button type="submit" className="bg-[#FDD344] text-[#013E3F] px-12 py-3 rounded-xl font-bold uppercase text-xs">Create Member Profile</button></div>
