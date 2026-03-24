@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { TrainingModule, UserModule } from '../types/database';
+import type { ModuleComment } from '../types';
 
 /**
  * Create a new training module definition
@@ -219,4 +220,83 @@ export async function toggleModuleLike(
   liked: boolean
 ): Promise<UserModule | null> {
   return updateModuleProgress(userId, moduleId, { liked });
+}
+
+/**
+ * Get all comments grouped by module ID
+ */
+export async function getAllModuleComments(): Promise<Record<string, ModuleComment[]>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('module_comments')
+    .select('*, profiles(name)')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching all comments:', error.message);
+    return {};
+  }
+
+  const grouped: Record<string, ModuleComment[]> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const row of (data || []) as any[]) {
+    const moduleId = row.module_id;
+    if (!grouped[moduleId]) grouped[moduleId] = [];
+    grouped[moduleId].push({
+      id: row.id,
+      author: row.profiles?.name || 'Unknown',
+      text: row.text,
+      date: row.created_at,
+    });
+  }
+  return grouped;
+}
+
+/**
+ * Get comments for a module
+ */
+export async function getModuleComments(moduleId: string): Promise<ModuleComment[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('module_comments')
+    .select('*, profiles(name)')
+    .eq('module_id', moduleId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching comments:', error.message);
+    return [];
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    author: row.profiles?.name || 'Unknown',
+    text: row.text,
+    date: row.created_at,
+  }));
+}
+
+/**
+ * Add a comment to a module
+ */
+export async function addModuleComment(moduleId: string, userId: string, text: string): Promise<ModuleComment | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('module_comments')
+    .insert({ module_id: moduleId, user_id: userId, text })
+    .select('*, profiles(name)')
+    .single();
+
+  if (error) {
+    console.error('Error adding comment:', error.message);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    author: data.profiles?.name || 'Unknown',
+    text: data.text,
+    date: data.created_at,
+  };
 }

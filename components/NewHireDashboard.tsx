@@ -11,6 +11,8 @@ import { useShoutouts } from '../hooks/useShoutouts';
 import { useProfile } from '../hooks/useProfile';
 import { useProfileById } from '../hooks/useProfileById';
 import { useLeadershipTeam } from '../hooks/useLeadershipTeam';
+import { getModuleComments, addModuleComment, getAllModuleComments } from '../services/moduleService';
+import type { ModuleComment } from '../types';
 
 interface NewHireDashboardProps {
   user: User;
@@ -137,6 +139,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
   // Engagement State
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [moduleComments, setModuleComments] = useState<Record<string, ModuleComment[]>>({});
 
   // Initialize prompt answers
   useEffect(() => {
@@ -155,6 +158,11 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
       setWorkbookInputs(prev => ({ ...prev, ...workbookResponses }));
     }
   }, [workbookResponses]);
+
+  // Load all module comments on mount
+  useEffect(() => {
+    getAllModuleComments().then(setModuleComments);
+  }, []);
   
   // Filter State
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
@@ -238,21 +246,19 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
     setExpandedComments(newSet);
   };
 
-  const handlePostComment = (module: TrainingModule) => {
+  const handlePostComment = async (module: TrainingModule) => {
     const text = commentDrafts[module.id];
     if (!text || !text.trim()) return;
 
-    if (!module.comments) module.comments = [];
-    
-    module.comments.push({
-      id: `c-${Date.now()}`,
-      author: user.name,
-      text: text,
-      date: new Date().toISOString()
-    });
+    const comment = await addModuleComment(module.id, user.id, text);
+    if (comment) {
+      setModuleComments(prev => ({
+        ...prev,
+        [module.id]: [...(prev[module.id] || []), comment],
+      }));
+    }
 
     setCommentDrafts(prev => ({...prev, [module.id]: ''}));
-    setUpdateCounter(c => c + 1);
   };
 
   // Automated handler for calls
@@ -1182,17 +1188,17 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                                  className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide transition-colors ${isExpanded ? 'text-[#013E3F]' : 'text-[#013E3F]/40 hover:text-[#013E3F]'}`}
                                >
                                   <MessageCircle className="w-4 h-4" />
-                                  {module.comments?.length || 0} Comments
+                                  {moduleComments[module.id]?.length || 0} Comments
                                </button>
                             </div>
 
                             {/* Expanded Comments Section */}
                             {isExpanded && (
-                               <div className="bg-[#F3EEE7]/30 p-4 rounded-lg mb-4 animate-in slide-in-from-top-2">
+                               <div className="bg-[#F3EEE7]/60 p-4 rounded-lg mb-4 animate-in slide-in-from-top-2">
                                   <div className="space-y-3 mb-4 max-h-[200px] overflow-y-auto custom-scrollbar">
-                                     {module.comments && module.comments.length > 0 ? (
-                                        module.comments.map(comment => (
-                                           <div key={comment.id} className="bg-white p-3 rounded border border-[#013E3F]/5 text-sm shadow-sm">
+                                     {moduleComments[module.id] && moduleComments[module.id].length > 0 ? (
+                                        moduleComments[module.id].map(comment => (
+                                           <div key={comment.id} className="bg-white p-3 rounded border border-[#013E3F]/15 text-sm shadow-sm">
                                               <div className="flex justify-between items-center mb-1">
                                                  <span className="font-bold text-[#013E3F] text-xs uppercase">{comment.author}</span>
                                                  <span className="text-[10px] text-[#013E3F]/40">{new Date(comment.date).toLocaleDateString()}</span>
@@ -1201,19 +1207,19 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                                            </div>
                                         ))
                                      ) : (
-                                        <p className="text-center text-[#013E3F]/40 text-xs italic py-2">No comments yet. Be the first!</p>
+                                        <p className="text-center text-[#013E3F]/50 text-xs italic py-2">No comments yet. Be the first!</p>
                                      )}
                                   </div>
                                   <div className="flex gap-2">
-                                     <input 
-                                       type="text" 
-                                       placeholder="Add a comment..." 
-                                       className="flex-1 text-sm p-2 border border-[#013E3F]/10 rounded focus:outline-none focus:border-[#013E3F]"
+                                     <input
+                                       type="text"
+                                       placeholder="Add a comment..."
+                                       className="flex-1 text-sm p-2 border border-[#013E3F]/30 rounded focus:outline-none focus:border-[#013E3F]"
                                        value={commentDrafts[module.id] || ''}
                                        onChange={(e) => setCommentDrafts({...commentDrafts, [module.id]: e.target.value})}
                                        onKeyDown={(e) => e.key === 'Enter' && handlePostComment(module)}
                                      />
-                                     <button 
+                                     <button
                                        onClick={() => handlePostComment(module)}
                                        className="bg-[#013E3F] text-[#F3EEE7] p-2 rounded hover:bg-[#013E3F]/90 transition-colors"
                                      >
