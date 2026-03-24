@@ -610,7 +610,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
            </div>
            <div className="bg-[#013E3F] border border-[#F3EEE7]/10 p-8 rounded-xl relative overflow-hidden text-[#F3EEE7]">
               <h3 className="font-serif text-xl flex items-center gap-2 mb-4"><Wand2 className="w-5 h-5 text-[#FDD344]" /> AI Progress Intelligence</h3>
-              <div className="bg-[#002b2c] p-6 rounded-lg text-sm leading-relaxed italic">{analyzing ? <Loader2 className="w-6 h-6 animate-spin mx-auto mt-10" /> : analysisResult || "Request a regional analysis to see performance trends across cohorts."}</div>
+              <div className="bg-[#002b2c] p-6 rounded-lg text-sm leading-relaxed">{analyzing ? <Loader2 className="w-6 h-6 animate-spin mx-auto mt-10" /> : analysisResult ? <div className="space-y-3">{analysisResult.split('\n').filter(l => l.trim()).map((line, i) => {
+                const rendered = line.replace(/\*\*(.*?)\*\*/g, '<strong class="text-[#FDD344]">$1</strong>').replace(/^- /, '');
+                const isBullet = line.trimStart().startsWith('- ');
+                return <div key={i} className={`${isBullet ? 'flex gap-2' : ''}`}>{isBullet && <span className="text-[#FDD344] mt-0.5 shrink-0">&#8226;</span>}<span dangerouslySetInnerHTML={{ __html: rendered }} /></div>;
+              })}</div> : <span className="italic opacity-70">Request a regional analysis to see performance trends across cohorts.</span>}</div>
               {!analysisResult && <button onClick={handleAnalyze} className="mt-4 bg-[#FDD344] text-[#013E3F] px-8 py-3 rounded text-xs font-bold uppercase tracking-wide">Execute Analysis</button>}
            </div>
         </div>
