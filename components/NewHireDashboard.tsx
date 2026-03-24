@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, NewHireProfile, TrainingModule } from '../types';
-import { NEW_HIRES, MANAGERS, UNIVERSAL_SERVICE_STEPS } from '../constants';
+// Static UI content — intentionally kept as constant (not user data)
+import { UNIVERSAL_SERVICE_STEPS } from '../constants';
 import { CheckCircle, Circle, Video, FileText, ArrowRight, Slack, Megaphone, Target, ClipboardList, Users, UserCheck, BookOpen, X, Save, AtSign, Lightbulb, PenTool, MessageSquare, Quote, ChevronRight, Calendar as CalendarIcon, ChevronLeft, AlertTriangle, ArrowUpRight, PlayCircle, MapPin, LayoutDashboard, HeartHandshake, Eye, Star, Compass, ListOrdered, Info, Briefcase, MessageCircle, Globe, GraduationCap, LifeBuoy, User as UserIcon, Link as LinkIcon, ThumbsUp, Send, Timer, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useToast } from './Toast';
@@ -8,6 +9,8 @@ import { useModules } from '../hooks/useModules';
 import { useWorkbook } from '../hooks/useWorkbook';
 import { useShoutouts } from '../hooks/useShoutouts';
 import { useProfile } from '../hooks/useProfile';
+import { useProfileById } from '../hooks/useProfileById';
+import { useLeadershipTeam } from '../hooks/useLeadershipTeam';
 
 interface NewHireDashboardProps {
   user: User;
@@ -23,29 +26,50 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
   const { responsesMap: workbookResponses, commentsMap: workbookComments, loading: workbookLoading, saveResponse } = useWorkbook(user.id);
   const { shoutouts: supabaseShoutouts } = useShoutouts(user.id);
 
-  // Fallback to mock data during transition (when Supabase data isn't available yet)
-  const mockProfile = NEW_HIRES.find(h => h.id === user.id) || NEW_HIRES.find(h => h.role === 'New Hire') || NEW_HIRES[0];
-
-  // Use Supabase profile if available, otherwise mock data
+  // Build profile from Supabase data with explicit defaults for null fields
   const myProfile = useMemo(() => {
     if (supabaseProfile) {
-      // Create a compatible profile shape from Supabase data
       return {
-        ...mockProfile,
         id: supabaseProfile.id,
         name: supabaseProfile.name,
         email: supabaseProfile.email,
-        avatar: supabaseProfile.avatar || mockProfile.avatar,
-        title: supabaseProfile.title || mockProfile.title,
-        managerId: supabaseProfile.manager_id || mockProfile.managerId,
-        startDate: supabaseProfile.start_date || mockProfile.startDate,
-        department: supabaseProfile.department || mockProfile.department,
+        role: supabaseProfile.role || 'New Hire',
+        avatar: supabaseProfile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(supabaseProfile.name)}&background=013E3F&color=F3EEE7`,
+        title: supabaseProfile.title || 'Team Member',
+        managerId: supabaseProfile.manager_id || null,
+        startDate: supabaseProfile.start_date || new Date().toISOString().split('T')[0],
+        department: supabaseProfile.department || '',
+        region: supabaseProfile.region || null,
+        modules: [] as TrainingModule[],
+        okrs: [] as any[],
+        shoutouts: [] as any[],
+        customPrompts: [] as any[],
         workbookResponses: workbookResponses,
         workbookComments: workbookComments,
+        progress: 0,
       };
     }
-    return mockProfile;
-  }, [supabaseProfile, mockProfile, workbookResponses, workbookComments]);
+    // Minimal defaults while loading
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email || '',
+      role: user.role || 'New Hire',
+      avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=013E3F&color=F3EEE7`,
+      title: user.title || 'Team Member',
+      managerId: null as string | null,
+      startDate: new Date().toISOString().split('T')[0],
+      department: '',
+      region: null as string | null,
+      modules: [] as TrainingModule[],
+      okrs: [] as any[],
+      shoutouts: [] as any[],
+      customPrompts: [] as any[],
+      workbookResponses: workbookResponses || {},
+      workbookComments: workbookComments || {},
+      progress: 0,
+    };
+  }, [supabaseProfile, user, workbookResponses, workbookComments]);
 
   // Transform Supabase modules to match the expected TrainingModule interface
   const myModules: TrainingModule[] = useMemo(() => {
@@ -65,10 +89,14 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
         likes: m.progress?.liked ? 1 : 0,
       }));
     }
-    return mockProfile.modules;
-  }, [supabaseModules, mockProfile.modules]);
+    return [];
+  }, [supabaseModules]);
 
-  const myManager = MANAGERS.find(m => m.id === myProfile.managerId) || MANAGERS[0];
+  // Fetch manager profile from Supabase
+  const { profile: managerProfile, loading: managerLoading } = useProfileById(myProfile.managerId);
+  const myManager = managerProfile
+    ? { name: managerProfile.name, avatar: managerProfile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(managerProfile.name)}&background=013E3F&color=F3EEE7`, id: managerProfile.id }
+    : { name: 'No manager assigned', avatar: `https://ui-avatars.com/api/?name=NA&background=013E3F&color=F3EEE7`, id: '' };
 
   // Navigation State
   const [showWelcomeGuide, setShowWelcomeGuide] = useState(() => {
@@ -136,16 +164,15 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
   // Monthly Calendar State
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date(2026, 0, 1));
 
-  // --- LEADERSHIP TEAM MOCK DATA ---
-  const rd = MANAGERS.find(m => m.title === 'Regional Director' && m.region === 'North East') || MANAGERS[0];
-  const gm = NEW_HIRES.find(h => h.title === 'General Manager') || { name: 'Sarah Executive', avatar: 'https://randomuser.me/api/portraits/women/29.jpg', id: 'nh-4', title: 'General Manager' };
-  const agm = NEW_HIRES.find(h => h.title === 'Assistant General Manager') || { name: 'Jordan Staff', avatar: 'https://randomuser.me/api/portraits/men/22.jpg', id: 'nh-2', title: 'Assistant General Manager' };
-
-  const unitLeaders = [
-    { ...rd, roleLabel: 'Regional Director' },
-    { ...gm, roleLabel: 'General Manager' },
-    { ...agm, roleLabel: 'Assistant General Manager' }
-  ];
+  // Fetch leadership team from Supabase by region
+  const { leaders: leadershipData, loading: leadershipLoading } = useLeadershipTeam(myProfile.region);
+  const unitLeaders = leadershipData.map(l => ({
+    id: l.profile.id,
+    name: l.profile.name,
+    avatar: l.profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(l.profile.name)}&background=013E3F&color=F3EEE7`,
+    title: l.profile.title || l.roleLabel,
+    roleLabel: l.roleLabel,
+  }));
 
   const toggleModule = async (id: string) => {
     const newSet = new Set(completedModules);
@@ -254,22 +281,12 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
     // Save all workbook inputs to Supabase
     if (supabaseProfile) {
       const savePromises = Object.entries(workbookInputs).map(([key, value]) =>
-        saveResponse(key, value)
+        saveResponse(key, value as string)
       );
       await Promise.all(savePromises);
     }
 
-    // Also update mock data for backward compatibility
-    mockProfile.workbookResponses = workbookInputs;
-
-    // Save prompts
-    if (mockProfile.customPrompts) {
-      mockProfile.customPrompts.forEach(p => {
-        if (promptAnswers[p.id]) {
-          p.answer = promptAnswers[p.id];
-        }
-      });
-    }
+    // Prompts are saved via Supabase hooks — no mock data mutation needed
 
     setShowWorkbook(false);
     confetti({
@@ -959,6 +976,14 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                      <Briefcase className="w-3 h-3" /> Your Leadership!
                    </h3>
                    <div className="space-y-4">
+                      {leadershipLoading ? (
+                        <div className="flex items-center gap-2 text-[#013E3F]/50 text-sm py-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Loading leadership team...
+                        </div>
+                      ) : unitLeaders.length === 0 ? (
+                        <p className="text-[#013E3F]/50 text-sm py-2">Leadership team not available</p>
+                      ) : null}
                       {unitLeaders.map((leader) => {
                          const isManager = leader.id === myProfile.managerId;
                          return (
