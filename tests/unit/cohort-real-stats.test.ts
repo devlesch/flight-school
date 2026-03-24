@@ -24,10 +24,8 @@ describe('Cohort page real stats migration', () => {
 
   it('uses isHireBehind for at-risk computation in cohort stats', () => {
     // The useMemo should use isHireBehind to compute atRisk
-    const cohortStatsBlock = dashboardSource.slice(
-      dashboardSource.indexOf('cohortSlotStats = useMemo'),
-      dashboardSource.indexOf('cohortSlotStats = useMemo') + 800
-    );
+    const startIdx = dashboardSource.indexOf('cohortSlotStats = useMemo');
+    const cohortStatsBlock = dashboardSource.slice(startIdx, startIdx + 1500);
     expect(cohortStatsBlock).toContain('isHireBehind');
   });
 });

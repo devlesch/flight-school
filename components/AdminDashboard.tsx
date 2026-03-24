@@ -261,7 +261,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     });
   }, [allUsers, students]);
 
-  // Pre-compute real stats per leader slot across all cohorts
+  // Pre-compute real stats per cohort-region pair (leaders are training leaders by region, not student managers)
   const cohortSlotStats = useMemo(() => {
     const statsMap = new Map<string, { hireCount: number; avgProgress: number; onTrack: number; atRisk: number }>();
     for (const cohort of cohorts) {
@@ -269,14 +269,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
         if (!s.startDate) return false;
         return s.startDate >= cohort.hire_start_date && s.startDate <= cohort.hire_end_date;
       });
-      for (const leader of cohort.cohort_leaders) {
-        const leaderStudents = cohortStudents.filter(s => s.managerId === leader.profile_id);
-        const hireCount = leaderStudents.length;
-        const avgProgress = hireCount > 0 ? Math.round(leaderStudents.reduce((sum, s) => sum + s.progress, 0) / hireCount) : 0;
-        const atRisk = leaderStudents.filter(isHireBehind).length;
+      // Aggregate per region (all leaders in same region share the same student pool)
+      for (const region of ['East', 'Central', 'West']) {
+        const regionStudents = cohortStudents.filter(s => s.region === region);
+        const hireCount = regionStudents.length;
+        const avgProgress = hireCount > 0 ? Math.round(regionStudents.reduce((sum, s) => sum + s.progress, 0) / hireCount) : 0;
+        const atRisk = regionStudents.filter(isHireBehind).length;
         const onTrack = hireCount - atRisk;
-        statsMap.set(`${cohort.id}-${leader.profile_id}`, { hireCount, avgProgress, onTrack, atRisk });
+        statsMap.set(`${cohort.id}-${region}`, { hireCount, avgProgress, onTrack, atRisk });
       }
+      // Also store cohort-wide stats
+      const hireCount = cohortStudents.length;
+      const avgProgress = hireCount > 0 ? Math.round(cohortStudents.reduce((sum, s) => sum + s.progress, 0) / hireCount) : 0;
+      const atRisk = cohortStudents.filter(isHireBehind).length;
+      const onTrack = hireCount - atRisk;
+      statsMap.set(`${cohort.id}-all`, { hireCount, avgProgress, onTrack, atRisk });
     }
     return statsMap;
   }, [students, cohorts]);
@@ -1215,8 +1222,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                           const leader = leaderGrid[key];
                           if (leader) {
                             const profile = leader.profiles;
-                            // Real stats from useAdminDashboard().students
-                            const slotStats = selectedCohort ? cohortSlotStats.get(`${selectedCohort}-${profile.id}`) : undefined;
+                            // Real stats from useAdminDashboard().students, grouped by region
+                            const slotStats = selectedCohort ? cohortSlotStats.get(`${selectedCohort}-${region}`) : undefined;
                             const avgProgress = slotStats?.avgProgress ?? 0;
                             const onTrack = slotStats?.onTrack ?? 0;
                             const behind = slotStats?.atRisk ?? 0;
