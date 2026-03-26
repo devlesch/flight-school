@@ -17,6 +17,8 @@ import confetti from 'canvas-confetti';
 import { useAllUsers } from '../hooks/useTeam';
 import { useAdminDashboard } from '../hooks/useAdminDashboard';
 import { useCohorts } from '../hooks/useCohorts';
+import { useLessonlyStatus } from '../hooks/useLessonlyStatus';
+import { updateModuleProgress } from '../services/moduleService';
 import { supabase } from '../lib/supabase';
 
 export type AdminViewMode = 'dashboard' | 'workflow' | 'tasks' | 'cohorts' | 'agenda' | 'communications' | 'engagement' | 'settings';
@@ -151,6 +153,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [selectedHireForDrilldown, setSelectedHireForDrilldown] = useState<NewHireProfile | null>(null);
   const [drilldownTab, setDrilldownTab] = useState<'overview' | 'workbook' | 'tracker'>('overview');
   
+  // Lessonly status integration for cohort drilldown
+  const drilldownLessonlyModules = useMemo(() =>
+    selectedHireForDrilldown?.modules.map(m => ({ id: m.id, type: m.type, link: m.link })) || [],
+    [selectedHireForDrilldown]
+  );
+  const { statuses: drilldownLessonlyStatuses, loading: drilldownLessonlyLoading } = useLessonlyStatus(
+    selectedHireForDrilldown?.email || null,
+    drilldownLessonlyModules
+  );
+
+  // Write-through: sync Lessonly completions to user_modules DB
+  useEffect(() => {
+    if (!selectedHireForDrilldown || !drilldownLessonlyStatuses || Object.keys(drilldownLessonlyStatuses).length === 0) return;
+    for (const mod of selectedHireForDrilldown.modules) {
+      if (mod.type === 'LESSONLY' && !mod.completed && drilldownLessonlyStatuses[mod.id]?.status === 'Completed') {
+        updateModuleProgress(selectedHireForDrilldown.id, mod.id, { completed: true });
+      }
+    }
+  }, [drilldownLessonlyStatuses, selectedHireForDrilldown]);
+
   // Historical Metric View
   const [managerMetricMode, setManagerMetricMode] = useState<'snapshot' | 'history'>('snapshot');
 
@@ -1867,11 +1889,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                                   </td>
                                   <td className="p-4 text-xs font-bold text-[#013E3F]/60">{m.host || 'General Manager'}</td>
                                   <td className="p-4 text-right">
-                                    {m.completed ? (
-                                      <span className="text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Complete</span>
-                                    ) : (
-                                      <span className="text-[#013E3F]/40 bg-[#F3EEE7] px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Pending</span>
-                                    )}
+                                    {(() => {
+                                      if (m.type === 'LESSONLY' && drilldownLessonlyStatuses[m.id]) {
+                                        const ls = drilldownLessonlyStatuses[m.id];
+                                        if (ls.status === 'Completed') return <span className="text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Complete</span>;
+                                        if (ls.status === 'not_found') return <span className="text-amber-700 bg-amber-50 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Not Enrolled</span>;
+                                        return <span className="text-[#013E3F]/40 bg-[#F3EEE7] px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Pending</span>;
+                                      }
+                                      if (m.type === 'LESSONLY' && drilldownLessonlyLoading) {
+                                        return <span className="text-[#013E3F]/30 bg-[#F3EEE7] px-2 py-1 rounded text-xs font-bold uppercase tracking-wide animate-pulse">...</span>;
+                                      }
+                                      return m.completed
+                                        ? <span className="text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Complete</span>
+                                        : <span className="text-[#013E3F]/40 bg-[#F3EEE7] px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Pending</span>;
+                                    })()}
                                   </td>
                                 </tr>
                               );
