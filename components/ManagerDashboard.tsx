@@ -6,6 +6,7 @@ import { useToast } from './Toast';
 import confetti from 'canvas-confetti';
 import { useCohortTeam } from '../hooks/useCohortTeam';
 import { useManagerTasks } from '../hooks/useManagerTasks';
+import { syncLessonlyStatus } from '../services/lessonlySyncService';
 
 interface ManagerDashboardProps {
   user: User;
@@ -225,6 +226,8 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
   const openHireModal = (hire: NewHireProfile, tab: 'overview' | 'workbook' | 'tracker' = 'overview') => {
     setViewingHire(hire);
     setViewingHireTab(tab);
+    // Fire-and-forget: sync Lessonly status in background
+    syncLessonlyStatus(hire.id, hire.email, hire.modules);
     setCommentInputs({});
     setShoutoutMessage('');
     setIsSendingShoutout(false);
