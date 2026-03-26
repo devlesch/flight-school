@@ -24,6 +24,11 @@ Replace mock constants with cohort-based queries: manager → cohort_leaders →
 
 Replace hardcoded hash-formula stats (Progress, Hires, On Track, At Risk) in cohort leader slots with real data from useAdminDashboard().students.
 
+### [~] Track: Lessonly API Integration + API Key Security Hardening
+*Link: [./conductor/tracks/lessonly-integration_20260325/](./conductor/tracks/lessonly-integration_20260325/)*
+
+Integrate Lessonly/Seismic Learning API to auto-track LESSONLY module completion in cohort user cards. Move Gemini API key behind Edge Function proxy for security. Parse lesson IDs from existing module URLs.
+
 ### [x] Track: New Hire Dashboard — Real Data Integration
 *Link: [./conductor/tracks/newhire-real-data_20260323/](./conductor/tracks/newhire-real-data_20260323/)*
 

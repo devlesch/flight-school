@@ -1,0 +1,35 @@
+{
+  "track_id": "lessonly-integration_20260325",
+  "title": "Lessonly API Integration + API Key Security Hardening",
+  "type": "feature",
+  "status": "planned",
+  "priority": "high",
+  "depends_on": [],
+  "estimated_hours": null,
+  "created_at": "2026-03-25T20:00:00Z",
+  "updated_at": "2026-03-25T21:00:00Z",
+  "description": "Integrate Lessonly API for auto-tracking LESSONLY module completion. Move Gemini API key behind Edge Function proxy.",
+  "has_design": true,
+  "artifacts": {
+    "design": true,
+    "spec": true,
+    "plan": true,
+    "beads": false
+  },
+  "workflow": {
+    "state": "TRACKED",
+    "history": [
+      {"state": "INIT", "at": "2026-03-25T20:00:00Z", "command": "design"},
+      {"state": "TRACKED", "at": "2026-03-25T21:00:00Z", "command": "newtrack"}
+    ],
+    "branch": null,
+    "archived": false,
+    "keep": false
+  },
+  "generation": {
+    "status": "complete",
+    "specCreatedAt": "2026-03-25T21:00:00Z",
+    "planCreatedAt": "2026-03-25T21:00:00Z",
+    "rbCompletedAt": null
+  }
+}
