@@ -24,20 +24,26 @@ export function useLessonlyStatus(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cacheRef = useRef<Record<string, Record<string, LessonlyModuleStatus>>>({});
+  const fetchedRef = useRef<string | null>(null);
+
+  // Stabilize: only re-fetch when email actually changes
+  const emailKey = email?.toLowerCase() || null;
 
   useEffect(() => {
-    if (!email) return;
+    if (!emailKey) return;
+
+    // Already fetched for this email
+    if (fetchedRef.current === emailKey) return;
+
+    // Check cache
+    if (cacheRef.current[emailKey]) {
+      setStatuses(cacheRef.current[emailKey]);
+      return;
+    }
 
     // Filter to LESSONLY modules with parseable lesson IDs
     const lessonlyModules = modules.filter(m => m.type === 'LESSONLY' && m.link);
     if (lessonlyModules.length === 0) return;
-
-    // Check cache
-    const cacheKey = email.toLowerCase();
-    if (cacheRef.current[cacheKey]) {
-      setStatuses(cacheRef.current[cacheKey]);
-      return;
-    }
 
     // Build module ID → lesson ID mapping
     const moduleToLessonId = new Map<string, number>();
@@ -53,16 +59,16 @@ export function useLessonlyStatus(
 
     if (lessonIds.length === 0) return;
 
-    let cancelled = false;
+    // Mark as fetching to prevent duplicate calls
+    fetchedRef.current = emailKey;
     setLoading(true);
     setError(null);
 
-    getLessonlyStatuses(email, lessonIds).then(response => {
-      if (cancelled) return;
-
+    getLessonlyStatuses(emailKey, lessonIds).then(response => {
       if (!response.success) {
         setError(response.error || 'Failed to fetch Lessonly statuses');
         setLoading(false);
+        fetchedRef.current = null; // Allow retry
         return;
       }
 
@@ -81,17 +87,26 @@ export function useLessonlyStatus(
       }
 
       // Cache and set
-      cacheRef.current[cacheKey] = result;
+      cacheRef.current[emailKey] = result;
       setStatuses(result);
       setLoading(false);
     }).catch(err => {
-      if (cancelled) return;
+      console.error('Lessonly fetch error:', err);
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
+      fetchedRef.current = null; // Allow retry
     });
+  }, [emailKey, modules]);
 
-    return () => { cancelled = true; };
-  }, [email, modules]);
+  // Reset when email changes (different user card)
+  useEffect(() => {
+    if (!emailKey) {
+      fetchedRef.current = null;
+      setStatuses({});
+      setLoading(false);
+      setError(null);
+    }
+  }, [emailKey]);
 
   return { statuses, loading, error };
 }
