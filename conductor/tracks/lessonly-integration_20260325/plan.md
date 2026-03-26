@@ -18,23 +18,23 @@
 
 ## Phase 2: Lessonly Frontend Service + Hook
 
-- [ ] Task 2.1: Create `services/lessonlyService.ts`
-  - [ ] Implement `parseLessonlyId(link)` — regex extract from URL
-  - [ ] Implement `getLessonlyStatuses(email, lessonIds)` — call Edge Function via `supabase.functions.invoke()`
-  - [ ] Define `LessonlyStatusResponse` interface
-- [ ] Task 2.2: Write tests for lessonlyService
-  - [ ] Test `parseLessonlyId` with valid URLs, invalid URLs, edge cases
-  - [ ] Test `getLessonlyStatuses` with mocked Edge Function responses
-- [ ] Task 2.3: Create `hooks/useLessonlyStatus.ts`
-  - [ ] Accept user email + LESSONLY modules array
-  - [ ] Parse lesson IDs from module `link` fields
-  - [ ] Call service, manage loading/error/data states
-  - [ ] Cache results per email to avoid re-fetching on tab switches
-- [ ] Task 2.4: Write tests for useLessonlyStatus hook
-  - [ ] Test loading state
-  - [ ] Test successful data return
-  - [ ] Test error fallback
-  - [ ] Test caching behavior
+- [x] Task 2.1: Create `services/lessonlyService.ts`
+  - [x] Implement `parseLessonlyId(link)` — regex extract from URL
+  - [x] Implement `getLessonlyStatuses(email, lessonIds)` — call Edge Function via `supabase.functions.invoke()`
+  - [x] Define `LessonlyStatusResponse` interface
+- [x] Task 2.2: Write tests for lessonlyService
+  - [x] Test `parseLessonlyId` with valid URLs, invalid URLs, edge cases
+  - [x] Test `getLessonlyStatuses` with mocked Edge Function responses
+- [x] Task 2.3: Create `hooks/useLessonlyStatus.ts`
+  - [x] Accept user email + LESSONLY modules array
+  - [x] Parse lesson IDs from module `link` fields
+  - [x] Call service, manage loading/error/data states
+  - [x] Cache results per email to avoid re-fetching on tab switches
+- [x] Task 2.4: Write tests for useLessonlyStatus hook
+  - [x] Test loading state
+  - [x] Test successful data return
+  - [x] Test error fallback
+  - [x] Test caching behavior
 - [ ] Task: Conductor - User Manual Verification 'Phase 2' (Protocol in workflow.md)
 
 ## Phase 3: Manager Dashboard Integration
