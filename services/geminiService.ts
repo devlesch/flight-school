@@ -1,21 +1,40 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
 import { NewHireProfile } from "../types";
+import { supabase } from "../lib/supabase";
 
-// Initialize the GoogleGenAI client lazily - only when actually used
-let ai: GoogleGenAI | null = null;
+/**
+ * Call the Gemini proxy Edge Function.
+ * Replaces direct @google/genai SDK usage — API key stays server-side.
+ */
+async function callGeminiProxy(
+  contents: string | { parts: { text: string }[] },
+  config?: { responseMimeType?: string; responseSchema?: unknown }
+): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('gemini-proxy', {
+      body: {
+        model: 'gemini-2.0-flash',
+        contents,
+        config,
+      },
+    });
 
-const getAI = () => {
-  if (!ai) {
-    const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn('Gemini API key not set - AI features disabled. Add GEMINI_API_KEY to .env.local');
+    if (error) {
+      console.error('Gemini proxy error:', error.message);
       return null;
     }
-    ai = new GoogleGenAI({ apiKey });
+
+    if (!data?.success) {
+      console.error('Gemini proxy failed:', data?.error);
+      return null;
+    }
+
+    return data.text || null;
+  } catch (err) {
+    console.error('Gemini service error:', err);
+    return null;
   }
-  return ai;
-};
+}
 
 export const generateEmailDraft = async (
   newHireName: string,
@@ -26,11 +45,11 @@ export const generateEmailDraft = async (
 ): Promise<string> => {
   try {
     const isOverdue = overdueItems.length > 0;
-    
+
     let prompt = `
       You are an AI assistant writing on behalf of a Manager at Industrious.
       Write a short email draft.
-      
+
       Sender: ${managerName}
       Recipient: ${newHireName}
       Context: The new hire has completed ${progress}% of their onboarding training.
@@ -40,7 +59,7 @@ export const generateEmailDraft = async (
     if (isOverdue) {
       prompt += `
       CRITICAL CONTEXT: The employee is overdue on the following tasks: ${overdueItems.join(', ')}.
-      
+
       TONE GUIDELINES:
       - Supportive but Accountable: Remind them dates are important for their success.
       - Direct: List the items that need attention.
@@ -62,18 +81,8 @@ export const generateEmailDraft = async (
       - Keep it under 100 words.
     `;
 
-    const client = getAI();
-    if (!client) {
-      return "[AI disabled] Sample email draft for " + newHireName;
-    }
-
-    // Use gemini-3-flash-preview for basic text generation tasks.
-    const response = await client.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-    });
-
-    return response.text || "Could not generate email draft.";
+    const text = await callGeminiProxy(prompt);
+    return text || "[AI disabled] Sample email draft for " + newHireName;
   } catch (error) {
     console.error("Gemini API Error:", error);
     return "Error communicating with AI service.";
@@ -89,31 +98,21 @@ export const generateManagerNotification = async (
   try {
     const prompt = `
       You are an AI assistant writing an email from an Admin to a Manager at Industrious.
-      
+
       Sender: ${adminName} (Operations Admin)
       Recipient: ${managerName} (Manager)
       Subject: New Hire Support Needed: ${atRiskEmployeeName}
-      
+
       Context: ${atRiskEmployeeName} is currently behind schedule on their onboarding training.
       Specific Delays: ${overdueItems.join(', ')}.
-      
+
       Goal: Ask the manager to check in with their direct report during their next 1:1 to unblock them.
-      
+
       Tone: Collaborative, professional, concise.
     `;
 
-    const client = getAI();
-    if (!client) {
-      return "[AI disabled] Sample notification for " + managerName;
-    }
-
-    // Use gemini-3-flash-preview for text generation tasks.
-    const response = await client.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-    });
-
-    return response.text || "Could not generate email draft.";
+    const text = await callGeminiProxy(prompt);
+    return text || "[AI disabled] Sample notification for " + managerName;
   } catch (error) {
     console.error("Gemini API Error:", error);
     return "Error communicating with AI service.";
@@ -122,7 +121,7 @@ export const generateManagerNotification = async (
 
 export const analyzeProgress = async (hires: NewHireProfile[]): Promise<string> => {
   try {
-    const dataSummary = hires.map(h => 
+    const dataSummary = hires.map(h =>
       `- ${h.name} (${h.department}): ${h.progress}% complete. Start Date: ${h.startDate}`
     ).join('\n');
 
@@ -130,26 +129,16 @@ export const analyzeProgress = async (hires: NewHireProfile[]): Promise<string> 
       Analyze the following onboarding progress data.
       Identify anyone behind schedule (less than 20% progress) and high performers.
       Suggest 1 specific, direct action item for the Operations Manager.
-      
+
       Data:
       ${dataSummary}
-      
+
       Tone: Professional, direct, fact-based. No fluff.
       Format: Markdown. Concise (max 3 bullet points).
     `;
 
-    const client = getAI();
-    if (!client) {
-      return "[AI disabled] Progress analysis unavailable";
-    }
-
-    // Use gemini-3-flash-preview for analysis of summary data.
-    const response = await client.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-    });
-
-    return response.text || "No analysis available.";
+    const text = await callGeminiProxy(prompt);
+    return text || "[AI disabled] Progress analysis unavailable";
   } catch (error) {
     console.error("Gemini API Error:", error);
     return "Error analyzing progress.";
@@ -163,72 +152,39 @@ export interface ExtractedHireData {
   hireDate: string;
   managerEmail: string;
   workerEmail: string;
-  businessTitle: string; // Added field
+  businessTitle: string;
 }
 
 export const extractNewHireData = async (rawText: string): Promise<ExtractedHireData[]> => {
   try {
-    const client = getAI();
-    if (!client) {
-      return [];
-    }
-
     const prompt = `
       Extract a list of new hires from the provided raw text (which comes from a PDF or Excel report).
       Only extract the first 5 entries found.
     `;
 
-    // Define the response schema for structured extraction and use gemini-3-flash-preview.
-    const response = await client.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      // Fix: Follow @google/genai guidelines for multi-part content
-      contents: { 
-        parts: [
-          { text: prompt },
-          { text: rawText }
-        ] 
-      },
-      config: {
+    const text = await callGeminiProxy(
+      { parts: [{ text: prompt }, { text: rawText }] },
+      {
         responseMimeType: 'application/json',
         responseSchema: {
-          type: Type.ARRAY,
+          type: 'ARRAY',
           items: {
-            type: Type.OBJECT,
+            type: 'OBJECT',
             properties: {
-              workerName: {
-                type: Type.STRING,
-                description: 'First and Last name of the worker.',
-              },
-              managerName: {
-                type: Type.STRING,
-                description: 'First and Last name of the manager.',
-              },
-              hireDate: {
-                type: Type.STRING,
-                description: 'Date of hire in YYYY-MM-DD format.',
-              },
-              managerEmail: {
-                type: Type.STRING,
-              },
-              workerEmail: {
-                type: Type.STRING,
-                description: 'Email of the worker, infer first.last@industriousoffice.com if not present.',
-              },
-              businessTitle: {
-                type: Type.STRING,
-                description: 'Job role or title of the worker.',
-              },
+              workerName: { type: 'STRING', description: 'First and Last name of the worker.' },
+              managerName: { type: 'STRING', description: 'First and Last name of the manager.' },
+              hireDate: { type: 'STRING', description: 'Date of hire in YYYY-MM-DD format.' },
+              managerEmail: { type: 'STRING' },
+              workerEmail: { type: 'STRING', description: 'Email of the worker, infer first.last@industriousoffice.com if not present.' },
+              businessTitle: { type: 'STRING', description: 'Job role or title of the worker.' },
             },
             required: ['workerName', 'managerName', 'hireDate', 'managerEmail', 'workerEmail', 'businessTitle'],
           },
         },
       }
-    });
-    
-    const text = response.text;
+    );
+
     if (!text) return [];
-    
-    // Parse the JSON array returned by the model.
     return JSON.parse(text) as ExtractedHireData[];
   } catch (error) {
     console.error("Gemini Extraction Error:", error);
