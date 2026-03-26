@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { User, NewHireProfile, WorkbookPrompt, ManagerTask, TrainingModule } from '../types';
 import { Slack, Mail, CheckSquare, Clock, AlertTriangle, MessageSquarePlus, ChevronRight, X, AlertCircle, CheckCircle, BookOpen, MessageCircle, Megaphone, ListTodo, Calendar, Timer, Info, Target, ArrowRight, LayoutDashboard, Eye, PlusCircle, Send, Users, UserCheck, ChevronLeft, ClipboardList, Briefcase, UserPlus, Search, Filter, UserCog, RefreshCw, Loader2 } from 'lucide-react';
 import { generateEmailDraft } from '../services/geminiService';
@@ -6,8 +6,6 @@ import { useToast } from './Toast';
 import confetti from 'canvas-confetti';
 import { useCohortTeam } from '../hooks/useCohortTeam';
 import { useManagerTasks } from '../hooks/useManagerTasks';
-import { useLessonlyStatus } from '../hooks/useLessonlyStatus';
-import { updateModuleProgress } from '../services/moduleService';
 
 interface ManagerDashboardProps {
   user: User;
@@ -105,26 +103,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
   const [drafting, setDrafting] = useState(false);
   const [generatedMessage, setGeneratedMessage] = useState<string | null>(null);
   
-  // Lessonly status integration
-  const lessonlyModules = useMemo(() =>
-    viewingHire?.modules.map(m => ({ id: m.id, type: m.type, link: m.link })) || [],
-    [viewingHire]
-  );
-  const { statuses: lessonlyStatuses, loading: lessonlyLoading } = useLessonlyStatus(
-    viewingHire?.email || null,
-    lessonlyModules
-  );
-
-  // Write-through: sync Lessonly completions to user_modules DB
-  useEffect(() => {
-    if (!viewingHire || !lessonlyStatuses || Object.keys(lessonlyStatuses).length === 0) return;
-    for (const mod of viewingHire.modules) {
-      if (mod.type === 'LESSONLY' && !mod.completed && lessonlyStatuses[mod.id]?.status === 'Completed') {
-        updateModuleProgress(viewingHire.id, mod.id, { completed: true });
-      }
-    }
-  }, [lessonlyStatuses, viewingHire]);
-
   // Reassignment State
   const [reassigningTask, setReassigningTask] = useState<{ hireId: string; moduleId: string; title: string } | null>(null);
   
@@ -949,22 +927,11 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                                     </div>
                                   </td>
                                   <td className="p-4 text-right">
-                                    {(() => {
-                                      // For LESSONLY modules, use API-sourced status
-                                      if (m.type === 'LESSONLY' && lessonlyStatuses[m.id]) {
-                                        const ls = lessonlyStatuses[m.id];
-                                        if (ls.status === 'Completed') return <span className="text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Complete</span>;
-                                        if (ls.status === 'not_found') return <span className="text-amber-700 bg-amber-50 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Not Enrolled</span>;
-                                        return <span className="text-[#013E3F]/40 bg-[#F3EEE7] px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Pending</span>;
-                                      }
-                                      if (m.type === 'LESSONLY' && lessonlyLoading) {
-                                        return <span className="text-[#013E3F]/30 bg-[#F3EEE7] px-2 py-1 rounded text-xs font-bold uppercase tracking-wide animate-pulse">...</span>;
-                                      }
-                                      // Default: manual completion flow
-                                      return m.completed
-                                        ? <span className="text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Complete</span>
-                                        : <span className="text-[#013E3F]/40 bg-[#F3EEE7] px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Pending</span>;
-                                    })()}
+                                    {m.completed ? (
+                                      <span className="text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Complete</span>
+                                    ) : (
+                                      <span className="text-[#013E3F]/40 bg-[#F3EEE7] px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Pending</span>
+                                    )}
                                   </td>
                                 </tr>
                               )
