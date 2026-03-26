@@ -39,14 +39,14 @@
 
 ## Phase 3: Manager Dashboard Integration
 
-- [ ] Task 3.1: Update `components/ManagerDashboard.tsx` status badge
-  - [ ] Import and call `useLessonlyStatus` hook when viewing a hire
-  - [ ] For LESSONLY modules: replace `m.completed` ternary with hook-sourced status
-  - [ ] Render "Complete" (green), "Pending" (gray), "Not Enrolled" (amber) badges
-  - [ ] Show loading indicator while Lessonly data is fetching
-- [ ] Task 3.2: Implement write-through to user_modules
-  - [ ] When hook returns "Completed" for a module, call `updateModuleProgress()` to set `completed = true` and `completed_at`
-  - [ ] Skip write if already marked completed in DB
+- [x] Task 3.1: Update `components/ManagerDashboard.tsx` status badge
+  - [x] Import and call `useLessonlyStatus` hook when viewing a hire
+  - [x] For LESSONLY modules: replace `m.completed` ternary with hook-sourced status
+  - [x] Render "Complete" (green), "Pending" (gray), "Not Enrolled" (amber) badges
+  - [x] Show loading indicator while Lessonly data is fetching
+- [x] Task 3.2: Implement write-through to user_modules
+  - [x] When hook returns "Completed" for a module, call `updateModuleProgress()` to set `completed = true` and `completed_at`
+  - [x] Skip write if already marked completed in DB
 - [ ] Task 3.3: Write component tests
   - [ ] Test LESSONLY module renders API-sourced status
   - [ ] Test non-LESSONLY module still uses `m.completed`
