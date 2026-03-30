@@ -165,14 +165,14 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
       hire.modules
         .filter(m => (m.type === 'MANAGER_LED' || m.type === 'LIVE_CALL') && !m.completed)
         .forEach(m => {
-          const d = new Date(m.dueDate);
+          const d = new Date(m.dueDate + 'T00:00:00');
           tasks.push({
             id: m.id,
             title: m.title,
             hireName: hire.name,
             hireAvatar: hire.avatar,
             dueDate: d,
-            dueDateStr: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+            dueDateStr: m.dueDate,
             type: 'TRAINING',
             moduleType: m.type,
             completed: false,

@@ -8,10 +8,10 @@ import { useToast } from './Toast';
 import { useModules } from '../hooks/useModules';
 import { useWorkbook } from '../hooks/useWorkbook';
 import { useShoutouts } from '../hooks/useShoutouts';
-import { useProfile } from '../hooks/useProfile';
 import { useProfileById } from '../hooks/useProfileById';
 import { useLeadershipTeam } from '../hooks/useLeadershipTeam';
 import { getModuleComments, addModuleComment, getAllModuleComments } from '../services/moduleService';
+import { getCohortStartingDateForUser } from '../services/cohortService';
 import type { ModuleComment } from '../types';
 
 interface NewHireDashboardProps {
@@ -23,7 +23,7 @@ interface NewHireDashboardProps {
 const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, onTabChange }) => {
   const toast = useToast();
   // Supabase hooks for data fetching
-  const { profile: supabaseProfile, loading: profileLoading } = useProfile(user.id);
+  const { profile: supabaseProfile, loading: profileLoading } = useProfileById(user.id);
   const { modules: supabaseModules, loading: modulesLoading, markComplete, markIncomplete, toggleLike } = useModules(user.id);
   const { responsesMap: workbookResponses, commentsMap: workbookComments, loading: workbookLoading, saveResponse } = useWorkbook(user.id);
   const { shoutouts: supabaseShoutouts } = useShoutouts(user.id);
@@ -73,26 +73,44 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
     };
   }, [supabaseProfile, user, workbookResponses, workbookComments]);
 
+  // Cohort starting date — used for computing module due dates from day_offset
+  const [cohortStartingDate, setCohortStartingDate] = useState<string | null>(null);
+  useEffect(() => {
+    const startDate = myProfile.startDate;
+    if (startDate && startDate !== new Date().toISOString().split('T')[0]) {
+      getCohortStartingDateForUser(startDate).then(date => {
+        if (date) setCohortStartingDate(date);
+      });
+    }
+  }, [myProfile.startDate]);
+
   // Transform Supabase modules to match the expected TrainingModule interface
   const myModules: TrainingModule[] = useMemo(() => {
     if (supabaseModules.length > 0) {
-      return supabaseModules.map(m => ({
-        id: m.id,
-        title: m.title,
-        description: m.description || '',
-        type: m.type as TrainingModule['type'],
-        duration: m.duration || '',
-        completed: m.progress?.completed || false,
-        dueDate: m.progress?.due_date || new Date().toISOString().split('T')[0],
-        link: m.link || undefined,
-        score: m.progress?.score || undefined,
-        host: m.host || undefined,
-        liked: m.progress?.liked || false,
-        likes: m.progress?.liked ? 1 : 0,
-      }));
+      const baseDate = cohortStartingDate || myProfile.startDate;
+      return supabaseModules.map(m => {
+        // Compute due date from cohort starting date + module day_offset (same as manager view)
+        const computedDueDate = m.day_offset != null && baseDate
+          ? new Date(new Date(baseDate + 'T00:00:00').getTime() + m.day_offset * 86400000).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0];
+        return {
+          id: m.id,
+          title: m.title,
+          description: m.description || '',
+          type: m.type as TrainingModule['type'],
+          duration: m.duration || '',
+          completed: m.progress?.completed || false,
+          dueDate: m.progress?.due_date || computedDueDate,
+          link: m.link || undefined,
+          score: m.progress?.score || undefined,
+          host: m.host || undefined,
+          liked: m.progress?.liked || false,
+          likes: m.progress?.liked ? 1 : 0,
+        };
+      });
     }
     return [];
-  }, [supabaseModules]);
+  }, [supabaseModules, cohortStartingDate, myProfile.startDate]);
 
   // Fetch manager profile from Supabase
   const { profile: managerProfile, loading: managerLoading } = useProfileById(myProfile.managerId);

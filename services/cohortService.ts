@@ -61,6 +61,24 @@ export async function getCohorts(): Promise<Cohort[]> {
 }
 
 /**
+ * Find the cohort a user belongs to based on their start_date.
+ * Returns the cohort's starting_date (used for module offset calculations).
+ */
+export async function getCohortStartingDateForUser(userStartDate: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('cohorts')
+    .select('starting_date, hire_start_date, hire_end_date')
+    .lte('hire_start_date', userStartDate)
+    .gte('hire_end_date', userStartDate)
+    .order('hire_start_date', { ascending: false })
+    .limit(1);
+
+  if (error || !data || data.length === 0) return null;
+  return (data[0] as { starting_date: string | null; hire_start_date: string }).starting_date
+    || (data[0] as { hire_start_date: string }).hire_start_date;
+}
+
+/**
  * Get all cohorts with embedded leaders and their profiles
  */
 export async function getCohortsWithLeaders(): Promise<CohortWithLeaders[]> {
