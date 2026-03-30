@@ -306,7 +306,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     .not('start_date', 'is', null)
     .order('name', { ascending: true });
 
-  const memberProfiles = (allCohortProfiles || []).filter((p: any) =>
+  const cohortSlotMembers = (allCohortProfiles || []).filter((p: any) =>
     managerSlots.some(slot => p.standardized_role === slot.role_label && p.region === slot.region)
   );
 
@@ -315,7 +315,25 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     return { cohort, members: [], leaders };
   }
 
-  const profiles = (memberProfiles || []) as Profile[];
+  // Also fetch direct reports (manager_id = this manager)
+  const { data: directReports } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('manager_id', managerId)
+    .eq('role', 'New Hire')
+    .order('name', { ascending: true });
+
+  // Merge cohort slot members + direct reports, deduplicate by ID
+  const seen = new Set<string>();
+  const mergedProfiles: Profile[] = [];
+  for (const p of [...cohortSlotMembers, ...(directReports || [])] as Profile[]) {
+    if (!seen.has(p.id)) {
+      seen.add(p.id);
+      mergedProfiles.push(p);
+    }
+  }
+
+  const profiles = mergedProfiles;
   if (profiles.length === 0) {
     return { cohort, members: [], leaders };
   }
