@@ -291,8 +291,13 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     profile: row.profiles as Profile,
   }));
 
-  // 4. Get cohort members: profiles where start_date is within cohort date range and role = 'New Hire'
-  const { data: memberProfiles, error: membersError } = await supabase
+  // 4. Get cohort members filtered by this manager's leader slot(s): standardized_role + region
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const managerSlots = resolvedLeaderRows
+    .filter((r: any) => r.cohorts && (r.cohorts as Cohort).id === cohort.id)
+    .map((r: any) => ({ role_label: r.role_label as string, region: r.region as string }));
+
+  const { data: allCohortProfiles, error: membersError } = await supabase
     .from('profiles')
     .select('*')
     .eq('role', 'New Hire')
@@ -300,6 +305,10 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     .lte('start_date', cohort.hire_end_date)
     .not('start_date', 'is', null)
     .order('name', { ascending: true });
+
+  const memberProfiles = (allCohortProfiles || []).filter((p: any) =>
+    managerSlots.some(slot => p.standardized_role === slot.role_label && p.region === slot.region)
+  );
 
   if (membersError) {
     console.error('Error fetching cohort members:', membersError.message);
