@@ -391,6 +391,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       .then(({ count }) => setLoginCount(count ?? 0));
   }, [slotMembers]);
 
+  // Interaction count: messages sent by this manager to cohort students
+  const [interactionCount, setInteractionCount] = useState(0);
+  useEffect(() => {
+    if (!selectedCohortManager || slotMembers.length === 0) { setInteractionCount(0); return; }
+    const recipientIds = slotMembers.map(u => u.id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from('slack_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('sender_id', selectedCohortManager.id)
+      .in('recipient_id', recipientIds)
+      .then(({ count }: { count: number | null }) => setInteractionCount(count ?? 0));
+  }, [selectedCohortManager, slotMembers]);
+
   const [sessionLogs, setSessionLogs] = useState<{ user_id: string; logged_in_at: string }[]>([]);
 
   useEffect(() => {
@@ -1553,7 +1567,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                          return (
                            <>
                              <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">Avg Progress</p><p className="text-3xl font-serif text-[#013E3F]">{avgProgress}%</p></div>
-                             <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">Interactions</p><p className="text-3xl font-serif text-[#013E3F]">—</p></div>
+                             <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">Interactions</p><p className="text-3xl font-serif text-[#013E3F]">{interactionCount > 0 ? `${interactionCount} msg${interactionCount === 1 ? '' : 's'}` : 'None'}</p></div>
                              <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">At-Risk Response</p><p className="text-3xl font-serif text-[#013E3F]">{overdueCount > 0 ? `${overdueCount} overdue` : 'None'}</p></div>
                              <div className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 shadow-sm"><p className="text-[10px] font-bold text-[#013E3F]/40 uppercase tracking-widest mb-1">Logins</p><p className="text-3xl font-serif text-[#013E3F]">{loginCount > 0 ? `${loginCount} login${loginCount === 1 ? '' : 's'}` : 'None'}</p></div>
                            </>
