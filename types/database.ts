@@ -408,6 +408,33 @@ export interface Database {
         };
       };
     };
+      slack_messages: {
+        Row: {
+          id: string;
+          sender_id: string;
+          recipient_id: string;
+          message_text: string;
+          channel: string;
+          sent_at: string;
+        };
+        Insert: {
+          id?: string;
+          sender_id: string;
+          recipient_id: string;
+          message_text: string;
+          channel?: string;
+          sent_at?: string;
+        };
+        Update: {
+          id?: string;
+          sender_id?: string;
+          recipient_id?: string;
+          message_text?: string;
+          channel?: string;
+          sent_at?: string;
+        };
+      };
+    };
     Views: {
       [_ in never]: never;
     };
@@ -450,3 +477,5 @@ export type CohortLeaderInsert = Database['public']['Tables']['cohort_leaders'][
 export type CohortWithLeaders = Cohort & { cohort_leaders: (CohortLeader & { profiles: Profile })[] };
 
 export type SessionLog = Database['public']['Tables']['session_logs']['Row'];
+export type SlackMessage = Database['public']['Tables']['slack_messages']['Row'];
+export type SlackMessageInsert = Database['public']['Tables']['slack_messages']['Insert'];

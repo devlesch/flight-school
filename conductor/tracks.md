@@ -29,6 +29,11 @@ Replace hardcoded hash-formula stats (Progress, Hires, On Track, At Risk) in coh
 
 Integrate Lessonly/Seismic Learning API to auto-track LESSONLY module completion in cohort user cards. Move Gemini API key behind Edge Function proxy for security. Parse lesson IDs from existing module URLs.
 
+### [~] Track: Communication Message History Side Panel
+*Link: [./conductor/tracks/comms-history_20260330/](./conductor/tracks/comms-history_20260330/)*
+
+Log Slack messages sent from Flight School to a DB table. Add slide-in side panel on user cards showing message history — chronological for students, grouped by student for managers. Message count badges on cards.
+
 ### [x] Track: New Hire Dashboard — Real Data Integration
 *Link: [./conductor/tracks/newhire-real-data_20260323/](./conductor/tracks/newhire-real-data_20260323/)*
 
