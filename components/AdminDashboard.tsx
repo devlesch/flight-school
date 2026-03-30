@@ -19,6 +19,7 @@ import { useAllUsers } from '../hooks/useTeam';
 import { useAdminDashboard } from '../hooks/useAdminDashboard';
 import { useCohorts } from '../hooks/useCohorts';
 import { syncLessonlyStatus } from '../services/lessonlySyncService';
+import { getMessagesForUser, getMessagesSentBy, getMessageCounts, MessageRecord, GroupedMessages } from '../services/messageHistoryService';
 import { supabase } from '../lib/supabase';
 
 export type AdminViewMode = 'dashboard' | 'workflow' | 'tasks' | 'cohorts' | 'agenda' | 'communications' | 'engagement' | 'settings';
@@ -112,6 +113,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [taskSuccess, setTaskSuccess] = useState(false);
   const [messageTarget, setMessageTarget] = useState<'managers' | 'newhires'>('newhires');
   const [messageSearch, setMessageSearch] = useState('');
+  const [commsPanelUser, setCommsPanelUser] = useState<Profile | null>(null);
+  const [commsPanelMessages, setCommsPanelMessages] = useState<MessageRecord[]>([]);
+  const [commsPanelGrouped, setCommsPanelGrouped] = useState<GroupedMessages[]>([]);
+  const [commsPanelLoading, setCommsPanelLoading] = useState(false);
+  const [messageCounts, setMessageCounts] = useState<Record<string, number>>({});
+  const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
 
   const filteredCommsUsers = useMemo(() => {
     let filtered = allUsers.filter(p =>
@@ -129,6 +136,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     }
     return filtered;
   }, [allUsers, messageTarget, messageSearch]);
+
+  // Fetch message counts when communications view loads
+  useEffect(() => {
+    if (viewMode !== 'communications' || filteredCommsUsers.length === 0) return;
+    const ids = filteredCommsUsers.map(u => u.id);
+    const direction = messageTarget === 'newhires' ? 'received' : 'sent';
+    getMessageCounts(ids, direction).then(setMessageCounts);
+  }, [viewMode, filteredCommsUsers, messageTarget]);
+
+  const openCommsPanel = async (profile: Profile) => {
+    setCommsPanelUser(profile);
+    setCommsPanelLoading(true);
+    setExpandedMessages(new Set());
+    try {
+      if (profile.role === 'New Hire') {
+        const msgs = await getMessagesForUser(profile.id);
+        setCommsPanelMessages(msgs);
+        setCommsPanelGrouped([]);
+      } else {
+        const grouped = await getMessagesSentBy(profile.id);
+        setCommsPanelGrouped(grouped);
+        setCommsPanelMessages([]);
+      }
+    } catch {
+      setCommsPanelMessages([]);
+      setCommsPanelGrouped([]);
+    }
+    setCommsPanelLoading(false);
+  };
 
   const [commsDraft, setCommsDraft] = useState('');
   const [activeCommsAction, setActiveCommsAction] = useState<'email' | 'slack' | 'survey' | null>(null);
@@ -2145,9 +2181,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
            ) : (
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                {filteredCommsUsers.map(profile => (
-                 <div key={profile.id} className="bg-white rounded-2xl p-6 border border-[#013E3F]/10 shadow-sm">
+                 <div key={profile.id} className="bg-white rounded-2xl p-6 border border-[#013E3F]/10 shadow-sm hover:border-[#FDD344] transition-colors cursor-pointer" onClick={() => openCommsPanel(profile)}>
                    <div className="flex items-center gap-4 mb-6">
-                     <img src={profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=013E3F&color=F3EEE7`} className="w-12 h-12 rounded-full" />
+                     <div className="relative">
+                       <img src={profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=013E3F&color=F3EEE7`} className="w-12 h-12 rounded-full" />
+                       {messageCounts[profile.id] > 0 && (
+                         <span className="absolute -top-1 -right-1 bg-[#FDD344] text-[#013E3F] text-[9px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{messageCounts[profile.id]}</span>
+                       )}
+                     </div>
                      <div>
                        <h4 className="font-bold text-[#013E3F] truncate">{profile.name}</h4>
                        <p className="text-[10px] uppercase font-bold text-[#013E3F]/40 tracking-wider">{profile.title || profile.standardized_role || profile.role}</p>
@@ -2170,6 +2211,91 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
            )}
         </div>
       )}
+
+      {/* COMMS HISTORY SIDE PANEL */}
+      {commsPanelUser && createPortal(
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setCommsPanelUser(null)} onKeyDown={e => e.key === 'Escape' && setCommsPanelUser(null)}>
+          <div className="bg-black/30 absolute inset-0" />
+          <div className="relative w-[420px] max-w-full bg-white h-full shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-6 bg-[#013E3F] text-white flex items-center gap-4">
+              <img src={commsPanelUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(commsPanelUser.name)}&background=013E3F&color=F3EEE7`} className="w-10 h-10 rounded-full border border-white/20" />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-serif text-lg truncate">{commsPanelUser.name}</h3>
+                <p className="text-[10px] uppercase tracking-widest text-white/60">{commsPanelUser.role === 'New Hire' ? 'Messages Received' : 'Messages Sent'}</p>
+              </div>
+              <button onClick={() => setCommsPanelUser(null)} className="text-white/60 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Disclaimer */}
+            <div className="px-6 py-2 bg-[#F3EEE7] text-[10px] text-[#013E3F]/50 uppercase tracking-wider border-b border-[#013E3F]/5">
+              Showing messages sent from Flight School
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {commsPanelLoading ? (
+                <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#013E3F]/30" /></div>
+              ) : commsPanelUser.role === 'New Hire' ? (
+                /* Student view: chronological */
+                commsPanelMessages.length === 0 ? (
+                  <div className="text-center py-12"><MessageCircle className="w-8 h-8 text-[#013E3F]/10 mx-auto mb-3" /><p className="text-sm text-[#013E3F]/40">No messages sent yet</p></div>
+                ) : (
+                  <div className="space-y-4">
+                    {commsPanelMessages.map(msg => (
+                      <div key={msg.id} className="border border-[#013E3F]/10 rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-xs font-bold text-[#013E3F]">{msg.senderName}</span>
+                          <span className="text-[10px] text-[#013E3F]/40">{formatDate(msg.sentAt)}</span>
+                        </div>
+                        <p className="text-sm text-[#013E3F]/70 leading-relaxed">
+                          {expandedMessages.has(msg.id) || msg.messageText.length <= 150
+                            ? msg.messageText
+                            : msg.messageText.substring(0, 150) + '...'}
+                        </p>
+                        {msg.messageText.length > 150 && (
+                          <button onClick={() => setExpandedMessages(prev => { const s = new Set(prev); s.has(msg.id) ? s.delete(msg.id) : s.add(msg.id); return s; })} className="text-[10px] font-bold text-[#FDD344] mt-1">{expandedMessages.has(msg.id) ? 'Show less' : 'Show more'}</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                /* Manager view: grouped by student */
+                commsPanelGrouped.length === 0 ? (
+                  <div className="text-center py-12"><MessageCircle className="w-8 h-8 text-[#013E3F]/10 mx-auto mb-3" /><p className="text-sm text-[#013E3F]/40">No messages sent yet</p></div>
+                ) : (
+                  <div className="space-y-6">
+                    {commsPanelGrouped.map(group => (
+                      <div key={group.recipientId}>
+                        <div className="flex items-center gap-3 mb-3 cursor-pointer" onClick={() => setExpandedMessages(prev => { const s = new Set(prev); s.has(group.recipientId) ? s.delete(group.recipientId) : s.add(group.recipientId); return s; })}>
+                          <img src={group.recipientAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(group.recipientName)}&background=013E3F&color=F3EEE7`} className="w-8 h-8 rounded-full" />
+                          <div className="flex-1">
+                            <h4 className="text-sm font-bold text-[#013E3F]">{group.recipientName}</h4>
+                          </div>
+                          <span className="bg-[#FDD344] text-[#013E3F] text-[9px] font-bold px-2 py-0.5 rounded-full">{group.count} msg{group.count !== 1 ? 's' : ''}</span>
+                        </div>
+                        {expandedMessages.has(group.recipientId) && (
+                          <div className="ml-11 space-y-3 border-l-2 border-[#F3EEE7] pl-4">
+                            {group.messages.map(msg => (
+                              <div key={msg.id} className="text-sm">
+                                <span className="text-[10px] text-[#013E3F]/40">{formatDate(msg.sentAt)}</span>
+                                <p className="text-[#013E3F]/70 leading-relaxed mt-0.5">
+                                  {msg.messageText.length <= 150 ? msg.messageText : msg.messageText.substring(0, 150) + '...'}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        </div>,
+      document.body)}
 
       {/* ENGAGEMENT VIEW */}
       {viewMode === 'engagement' && (
