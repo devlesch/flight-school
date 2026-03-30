@@ -456,12 +456,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
            >
               <Users className="w-4 h-4" /> My Team
            </button>
-           <button 
-             onClick={() => setActiveTab('tracker')}
-             className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'tracker' ? 'bg-[#FDD344] text-[#013E3F] shadow-lg' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7]'}`}
-           >
-              <ClipboardList className="w-4 h-4" /> Tracker
-           </button>
+{/* Tracker tab hidden */}
         </div>
       </div>
 

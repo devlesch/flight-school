@@ -1560,13 +1560,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                          );
                        })()}
                      </div>
-                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                       {students.filter(h => slotMembers.some(sm => sm.id === h.id)).map(hire => (
-                         <div key={hire.id} onClick={() => { setSelectedHireForDrilldown(hire); syncLessonlyStatus(hire.id, hire.email, hire.modules); }} className="bg-white p-6 rounded-2xl border border-[#013E3F]/10 hover:border-[#FDD344] transition-all group cursor-pointer shadow-sm relative overflow-hidden">
-                            <div className="flex items-center gap-4 mb-4"><img src={hire.avatar} className="w-12 h-12 rounded-full border border-[#013E3F]/10" /><div><h4 className="font-bold text-[#013E3F] text-lg leading-tight group-hover:text-[#FDD344] transition-colors">{hire.name}</h4><p className="text-[10px] uppercase font-bold text-[#013E3F]/40 tracking-wider">{hire.title}</p></div></div><div className="w-full bg-[#F3EEE7] h-2 rounded-full overflow-hidden mb-3"><div className={`h-full transition-all duration-500 ${isHireBehind(hire) ? 'bg-red-400' : 'bg-[#013E3F]'}`} style={{ width: `${hire.progress}%` }} /></div><div className="flex justify-between items-center"><div className="flex flex-col"><span className="text-[10px] font-bold uppercase opacity-30">Completion</span><span className="font-serif font-bold text-[#013E3F]">{hire.progress}%</span></div><button className="text-[9px] font-bold uppercase tracking-widest text-[#013E3F]/40 group-hover:text-[#013E3F] flex items-center gap-1">View Profile <ArrowRight className="w-3 h-3" /></button></div><div className="absolute right-0 top-0 w-24 h-24 bg-[#FDD344]/5 rounded-full -translate-y-12 translate-x-12 group-hover:scale-150 transition-transform duration-500"></div>
-                         </div>
-                       ))}
-                     </div>
                      {/* Cohort Members from Supabase profiles */}
                      {slotMembers.length > 0 ? (
                        <div>
