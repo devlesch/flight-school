@@ -37,10 +37,10 @@ export interface ManagerCohortData {
  *   GM  → RD
  */
 export const LEADER_ROLE_MAP: Record<string, string[]> = {
-  MxA: ['MxM'],
-  MxM: ['AGM', 'GM'],
-  AGM: ['GM', 'RD'],
-  GM: ['RD'],
+  MxA: ['MxA', 'MxM'],
+  MxM: ['MxM', 'AGM', 'GM'],
+  AGM: ['AGM', 'GM', 'RD'],
+  GM: ['GM', 'RD'],
 };
 
 /**

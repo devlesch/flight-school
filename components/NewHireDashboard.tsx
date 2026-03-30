@@ -167,8 +167,8 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
   // Filter State
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
 
-  // Calendar State (Defaults to Jan 5 2026 for Week View)
-  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date(2026, 0, 5)); 
+  // Calendar State (Defaults to today's week)
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
   // Monthly Calendar State
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date(2026, 0, 1));
 
@@ -471,7 +471,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                 <div className="font-bold truncate leading-tight">{module.title}</div>
                 {module.link ? (
                   <a href={module.link} target="_blank" rel="noreferrer" className="opacity-80 hover:opacity-100 hover:underline flex items-center gap-1 mt-1 font-medium">
-                    <Video className="w-2.5 h-2.5" /> Join Call
+                    <Video className="w-2.5 h-2.5" /> Open
                   </a>
                 ) : (
                   <div className="opacity-70 mt-0.5">{module.duration}</div>
@@ -1087,7 +1087,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                                 <div className="font-bold truncate leading-tight">{module.title}</div>
                                 {module.link ? (
                                   <a href={module.link} target="_blank" rel="noreferrer" className="opacity-80 hover:opacity-100 hover:underline flex items-center gap-1 mt-1 font-medium">
-                                    <Video className="w-2.5 h-2.5" /> Join Call
+                                    <Video className="w-2.5 h-2.5" /> Open
                                   </a>
                                 ) : (
                                   <div className="opacity-70 mt-0.5">{module.duration}</div>
@@ -1239,7 +1239,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                                   className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#013E3F] hover:text-[#013E3F]/80 bg-[#FDD344] hover:bg-[#FDD344]/90 px-4 py-2 rounded transition-colors shadow-sm cursor-pointer"
                                 >
                                   <Video className="w-3 h-3" />
-                                  Join Call
+                                  Open
                                 </a>
                               )}
                               
@@ -1255,10 +1255,17 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                               )}
 
                               {(module.type === 'MANAGER_LED' || module.type === 'PERFORM' || module.type === 'SHADOW' || module.type === 'BAU' || module.type === 'LESSONLY') && !isCompleted && (
-                                <button className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#013E3F] border border-[#013E3F]/20 hover:border-[#013E3F] hover:bg-[#F3EEE7]/50 bg-white px-4 py-2 rounded transition-all">
-                                  {getModuleIcon(module.type)}
-                                  {module.type === 'PERFORM' || module.type === 'BAU' ? 'Mark Complete' : 'View Details'}
-                                </button>
+                                module.link && module.type !== 'PERFORM' && module.type !== 'BAU' ? (
+                                  <a href={module.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#013E3F] border border-[#013E3F]/20 hover:border-[#013E3F] hover:bg-[#F3EEE7]/50 bg-white px-4 py-2 rounded transition-all">
+                                    {getModuleIcon(module.type)}
+                                    View Details
+                                  </a>
+                                ) : (
+                                  <button className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#013E3F] border border-[#013E3F]/20 hover:border-[#013E3F] hover:bg-[#F3EEE7]/50 bg-white px-4 py-2 rounded transition-all">
+                                    {getModuleIcon(module.type)}
+                                    {module.type === 'PERFORM' || module.type === 'BAU' ? 'Mark Complete' : 'View Details'}
+                                  </button>
+                                )
                               )}
                             </div>
                           </div>
