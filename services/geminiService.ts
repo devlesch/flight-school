@@ -46,23 +46,26 @@ export const generateEmailDraft = async (
   try {
     const isOverdue = overdueItems.length > 0;
 
+    const isSlack = topic.toLowerCase().includes('slack');
     let prompt = `
-      You are an AI assistant writing on behalf of a Manager at Industrious.
-      Write a short email draft.
+      You are an AI assistant writing on behalf of an admin/manager at Industrious.
+      Write a short ${isSlack ? 'Slack message' : 'email'} directly TO a new hire (student).
+      Address them by first name. Use second person ("you", "your").
+      ${isSlack ? 'Do NOT include a subject line — this is a Slack DM, not an email.' : ''}
 
       Sender: ${managerName}
       Recipient: ${newHireName}
-      Context: The new hire has completed ${progress}% of their onboarding training.
+      Context: This new hire has completed ${progress}% of their onboarding training.
       Topic: ${topic}
     `;
 
     if (isOverdue) {
       prompt += `
-      CRITICAL CONTEXT: The employee is overdue on the following tasks: ${overdueItems.join(', ')}.
+      CRITICAL CONTEXT: They are overdue on the following tasks: ${overdueItems.join(', ')}.
 
       TONE GUIDELINES:
       - Supportive but Accountable: Remind them dates are important for their success.
-      - Direct: List the items that need attention.
+      - Direct: Mention the specific items that need attention.
       - Action-Oriented: Ask for a specific completion timeline.
       `;
     } else {
@@ -83,6 +86,53 @@ export const generateEmailDraft = async (
 
     const text = await callGeminiProxy(prompt);
     return text || "[AI disabled] Sample email draft for " + newHireName;
+  } catch (error) {
+    console.error("Gemini API Error:", error);
+    return "Error communicating with AI service.";
+  }
+};
+
+/**
+ * Generate an AI draft for a message TO a manager about their students' progress.
+ */
+export const generateManagerDraft = async (
+  adminName: string,
+  managerName: string,
+  studentSummaries: { name: string; progress: number; overdueItems: string[]; completedCount: number; totalCount: number }[],
+  isSlack: boolean
+): Promise<string> => {
+  try {
+    const summaryLines = studentSummaries.map(s => {
+      const status = s.overdueItems.length > 0
+        ? `${s.progress}% complete, OVERDUE on: ${s.overdueItems.join(', ')}`
+        : s.progress === 100
+          ? `100% complete — all done!`
+          : `${s.progress}% complete (${s.completedCount}/${s.totalCount} modules)`;
+      return `- ${s.name}: ${status}`;
+    }).join('\n');
+
+    const prompt = `
+      You are an AI assistant writing on behalf of an Operations Admin at Industrious.
+      Write a short ${isSlack ? 'Slack message' : 'email'} TO a manager about their students' onboarding progress.
+      Address the manager by first name. Refer to students by their first names in third person.
+      ${isSlack ? 'Do NOT include a subject line — this is a Slack DM, not an email.' : ''}
+
+      Sender: ${adminName} (Operations Admin)
+      Recipient: ${managerName} (Manager)
+
+      Their students' progress:
+      ${summaryLines}
+
+      GUIDELINES:
+      - Highlight students who are behind or overdue — ask the manager to check in with them.
+      - Celebrate students who have completed training or are ahead.
+      - Be collaborative and professional, not accusatory.
+      - Use short sentences. No jargon. No "marketing speak".
+      - Keep it under 150 words.
+    `;
+
+    const text = await callGeminiProxy(prompt);
+    return text || "[AI disabled] Sample manager update for " + managerName;
   } catch (error) {
     console.error("Gemini API Error:", error);
     return "Error communicating with AI service.";

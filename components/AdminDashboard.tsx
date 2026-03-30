@@ -6,7 +6,7 @@ import type { Profile, TrainingModule as DbTrainingModule, ModuleType } from '..
 // Mock imports removed — KPIs and AI analytics now use real Supabase data via useAdminDashboard()
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, LabelList, PieChart as RePieChart, Pie, Tooltip, LineChart, Line, AreaChart, Area } from 'recharts';
 import { Mail, Calendar, TrendingUp, CheckCircle, AlertCircle, FileText, Loader2, Wand2, UploadCloud, Video, ArrowRight, X, Users, Plus, Clock, MessageSquare, Zap, PieChart, Settings, Palette, UserCheck, Search, Send, ChevronLeft, ChevronRight, MessageCircle, Globe, AtSign, Filter, BarChart2, MousePointer2, Check, UserMinus, ArrowLeft, Slack, ClipboardCheck, Info, Target, LayoutDashboard, Star, ShieldCheck, UserCog, UserPlus, ZapOff, Activity, History, HelpCircle, FileUp, Building2, UserCircle, Save, Briefcase, RefreshCw, Edit3, BookOpen, Layers, UserPlus2, UserCheck2, HelpCircle as HelpIcon, Timer, ListTodo } from 'lucide-react';
-import { analyzeProgress, ExtractedHireData, generateManagerNotification, generateEmailDraft } from '../services/geminiService';
+import { analyzeProgress, ExtractedHireData, generateManagerNotification, generateEmailDraft, generateManagerDraft } from '../services/geminiService';
 import { createModule, getModules, updateModule, getUserModulesBatch } from '../services/moduleService';
 import type { UserModule as DbUserModule } from '../types/database';
 import { createCohort, updateCohort, LEADER_ROLE_MAP, upsertCohortLeader } from '../services/cohortService';
@@ -636,17 +636,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     }
 
     try {
-      const progress = 0;
-      const overdueItems: string[] = [];
+      const isSlack = type === 'slack';
+      const targetProfile = allUsers.find(u => u.id === targetUser.id);
+      const isManager = targetProfile?.role === 'Manager' || targetProfile?.role === 'Admin';
 
-      const draft = await generateEmailDraft(
-        targetUser.name,
-        user.name,
-        progress,
-        type === 'email' ? 'Onboarding progress update' : 'Quick check-in on Slack',
-        overdueItems
-      );
-      setCommsDraft(draft);
+      let draft: string;
+
+      if (isManager) {
+        // Manager target: summarize their students' progress
+        // Find students managed by this person (by manager_id or cohort)
+        const managerStudents = students.filter(s => s.managerId === targetUser.id);
+        const summaries = managerStudents.map(s => ({
+          name: s.name,
+          progress: s.progress,
+          completedCount: s.modules.filter(m => m.completed).length,
+          totalCount: s.modules.length,
+          overdueItems: s.modules
+            .filter(m => !m.completed && new Date(m.dueDate + 'T00:00:00') < new Date())
+            .map(m => m.title),
+        }));
+        draft = await generateManagerDraft(user.name, targetUser.name, summaries, isSlack);
+      } else {
+        // Student target: direct message about their progress
+        const studentData = students.find(s => s.id === targetUser.id);
+        const progress = studentData?.progress || 0;
+        const overdueItems = studentData?.modules
+          .filter(m => !m.completed && new Date(m.dueDate + 'T00:00:00') < new Date())
+          .map(m => m.title) || [];
+        const topic = isSlack ? 'Quick check-in on Slack' : 'Onboarding progress update';
+        draft = await generateEmailDraft(targetUser.name, user.name, progress, topic, overdueItems);
+      }
+
+      // Remove subject line for Slack messages
+      const cleanedDraft = isSlack
+        ? draft.replace(/^Subject:.*\n+/im, '').trim()
+        : draft;
+      setCommsDraft(cleanedDraft);
     } catch (error) {
       console.error("Error drafting comms:", error);
       setCommsDraft("Error generating draft. Please try again or draft manually.");
@@ -2317,7 +2342,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
 
       {/* MODALS */}
       {selectedUserForComms && activeCommsAction && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"><div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-10 animate-in zoom-in-95"><div className="flex justify-between items-center mb-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-[#F3EEE7] rounded-full flex items-center justify-center text-[#013E3F]">{activeCommsAction === 'email' && <Mail />}{activeCommsAction === 'slack' && <Slack />}{activeCommsAction === 'survey' && <ClipboardCheck />}</div><div><h3 className="font-serif text-2xl text-[#013E3F]">{activeCommsAction === 'survey' ? 'Satisfaction Survey' : `Draft ${activeCommsAction.charAt(0).toUpperCase() + activeCommsAction.slice(1)}`}</h3><p className="text-sm opacity-40 font-bold uppercase tracking-widest">To: {selectedUserForComms.name}</p></div></div><button onClick={() => setSelectedUserForComms(null)}><X className="w-5 h-5"/></button></div><div className="p-6 bg-[#F9F7F5] rounded-xl border border-[#013E3F]/10 min-h-[200px] relative">{sendingComms ? <div className="absolute inset-0 flex flex-col items-center justify-center"><Loader2 className="animate-spin mb-4" /><span>AI Drafting...</span></div> : <textarea className="w-full bg-transparent border-none text-sm text-[#013E3F] min-h-[200px] resize-none focus:ring-0" value={commsDraft} onChange={e => setCommsDraft(e.target.value)} />}</div><button disabled={sendingComms || !commsDraft.trim()} onClick={async () => { if (activeCommsAction === 'slack') { setSendingComms(true); const result = await sendSlackDM(selectedUserForComms.email, commsDraft); setSendingComms(false); if (result.success) { setSelectedUserForComms(null); toast.success('Slack message sent!'); } else { toast.error(`Failed to send: ${result.error || 'Unknown error'}`); } } else if (activeCommsAction === 'email') { window.open(`mailto:${selectedUserForComms.email}?subject=Onboarding Update&body=${encodeURIComponent(commsDraft)}`); setSelectedUserForComms(null); } else { setSelectedUserForComms(null); } }} className="w-full mt-6 py-5 bg-[#013E3F] text-[#F3EEE7] rounded-xl font-bold uppercase shadow-xl tracking-widest disabled:opacity-40 disabled:cursor-not-allowed">{sendingComms ? 'Sending...' : activeCommsAction === 'slack' ? 'Send via Slack' : activeCommsAction === 'email' ? 'Send Email' : 'Dispatch Message'}</button></div></div>,
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"><div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-10 animate-in zoom-in-95"><div className="flex justify-between items-center mb-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-[#F3EEE7] rounded-full flex items-center justify-center text-[#013E3F]">{activeCommsAction === 'email' && <Mail />}{activeCommsAction === 'slack' && <Slack />}{activeCommsAction === 'survey' && <ClipboardCheck />}</div><div><h3 className="font-serif text-2xl text-[#013E3F]">{activeCommsAction === 'survey' ? 'Satisfaction Survey' : `Draft ${activeCommsAction.charAt(0).toUpperCase() + activeCommsAction.slice(1)}`}</h3><p className="text-sm text-[#013E3F]/60 font-bold uppercase tracking-widest">To: {selectedUserForComms.name}</p></div></div><button onClick={() => setSelectedUserForComms(null)}><X className="w-5 h-5"/></button></div><div className="p-6 bg-[#F9F7F5] rounded-xl border border-[#013E3F]/10 min-h-[200px] relative">{sendingComms ? <div className="absolute inset-0 flex flex-col items-center justify-center"><Loader2 className="animate-spin mb-4" /><span>AI Drafting...</span></div> : <textarea className="w-full bg-transparent border-none text-sm text-[#013E3F] min-h-[200px] resize-none focus:ring-0" value={commsDraft} onChange={e => setCommsDraft(e.target.value)} />}</div><button disabled={sendingComms || !commsDraft.trim()} onClick={async () => { if (activeCommsAction === 'slack') { setSendingComms(true); const result = await sendSlackDM(selectedUserForComms.email, commsDraft); setSendingComms(false); if (result.success) { setSelectedUserForComms(null); toast.success('Slack message sent!'); } else { toast.error(`Failed to send: ${result.error || 'Unknown error'}`); } } else if (activeCommsAction === 'email') { window.open(`mailto:${selectedUserForComms.email}?subject=Onboarding Update&body=${encodeURIComponent(commsDraft)}`); setSelectedUserForComms(null); } else { setSelectedUserForComms(null); } }} className="w-full mt-6 py-5 bg-[#013E3F] text-[#F3EEE7] rounded-xl font-bold uppercase shadow-xl tracking-widest disabled:opacity-40 disabled:cursor-not-allowed">{sendingComms ? 'Sending...' : activeCommsAction === 'slack' ? 'Send via Slack' : activeCommsAction === 'email' ? 'Send Email' : 'Dispatch Message'}</button></div></div>,
       document.body)}
 
       {showEnrolledDrilldown && createPortal(
