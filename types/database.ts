@@ -87,6 +87,7 @@ export interface Database {
           sort_order: number;
           target_role: string | null;
           day_offset: number;
+          audience: string | null;
           created_at: string;
         };
         Insert: {
@@ -100,6 +101,7 @@ export interface Database {
           sort_order?: number;
           target_role?: string | null;
           day_offset?: number;
+          audience?: string | null;
           created_at?: string;
         };
         Update: {
@@ -113,6 +115,7 @@ export interface Database {
           sort_order?: number;
           target_role?: string | null;
           day_offset?: number;
+          audience?: string | null;
           created_at?: string;
         };
       };
@@ -407,7 +410,6 @@ export interface Database {
           created_at?: string;
         };
       };
-    };
       slack_messages: {
         Row: {
           id: string;

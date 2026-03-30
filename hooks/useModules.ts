@@ -26,7 +26,7 @@ export interface UseModulesReturn {
 /**
  * Hook for managing training modules with user progress
  */
-export function useModules(userId: string | undefined): UseModulesReturn {
+export function useModules(userId: string | undefined, audienceFilter?: 'cohort' | 'direct' | 'both' | null): UseModulesReturn {
   const [modules, setModules] = useState<ModuleWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,14 +42,14 @@ export function useModules(userId: string | undefined): UseModulesReturn {
     setError(null);
 
     try {
-      const data = await getModulesWithProgress(userId);
+      const data = await getModulesWithProgress(userId, audienceFilter);
       setModules(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load modules');
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, audienceFilter]);
 
   useEffect(() => {
     fetchModules();

@@ -34,6 +34,11 @@ Integrate Lessonly/Seismic Learning API to auto-track LESSONLY module completion
 
 Log Slack messages sent from Flight School to a DB table. Add slide-in side panel on user cards showing message history — chronological for students, grouped by student for managers. Message count badges on cards.
 
+### [ ] Track: Module Audience Targeting (Cohort vs Direct Reports)
+*Link: [./conductor/tracks/module-audience_20260330/](./conductor/tracks/module-audience_20260330/)*
+
+Add audience column to training_modules (cohort/direct/null). Task Builder gets audience dropdown. Module filtering respects student's source relationship to manager.
+
 ### [x] Track: New Hire Dashboard — Real Data Integration
 *Link: [./conductor/tracks/newhire-real-data_20260323/](./conductor/tracks/newhire-real-data_20260323/)*
 

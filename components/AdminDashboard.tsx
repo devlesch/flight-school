@@ -105,7 +105,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     });
   }, [allUsers, registryFilters]);
 
-  const [trainingData, setTrainingData] = useState({ title: '', description: '', method: 'MANAGER_LED' as TrainingModule['type'], targetRole: 'All Roles', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
+  const [trainingData, setTrainingData] = useState({ title: '', description: '', method: 'MANAGER_LED' as TrainingModule['type'], targetRole: 'All Roles', audience: 'all' as 'all' | 'cohort' | 'direct', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
   const [taskCategory, setTaskCategory] = useState<'module' | 'call'>('module');
   const [link, setLink] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -548,6 +548,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       description: mod.description || '',
       method: mod.type as TrainingModule['type'],
       targetRole: mod.target_role || 'All Roles',
+      audience: (mod.audience as 'cohort' | 'direct' | null) || 'all',
       assignmentDay: mod.day_offset ?? 0,
       hasWorkbook: false,
       workbookContent: '',
@@ -568,6 +569,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       type: (taskCategory === 'call' ? 'LIVE_CALL' : trainingData.method) as ModuleType,
       link: link || null,
       target_role: trainingData.targetRole === 'All Roles' ? null : trainingData.targetRole,
+      audience: trainingData.audience === 'all' ? null : trainingData.audience,
       day_offset: trainingData.assignmentDay,
     };
 
@@ -580,7 +582,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     if (result) {
       setTaskSuccess(true);
       setTimeout(() => {
-        setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
+        setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', audience: 'all', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
         setTaskCategory('module');
         setLink('');
         setTaskSuccess(false);
@@ -1080,7 +1082,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
               <button
                 onClick={() => {
                   setEditingModuleId(null);
-                  setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
+                  setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', audience: 'all', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
                   setTaskCategory('module');
                   setLink('');
                   setTaskError(null);
@@ -1242,6 +1244,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                   <div className="space-y-8">
                     <h4 className="text-[11px] font-bold uppercase text-[#F3EEE7]/40 tracking-[3px] border-b border-[#F3EEE7]/10 pb-2">Targeting</h4>
                     <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Target Role</label><select className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-3 text-sm" value={trainingData.targetRole} onChange={e => setTrainingData({...trainingData, targetRole: e.target.value})}><option>All Roles</option><option>MxA</option><option>MxM</option><option>AGM</option><option>GM</option><option>RD</option></select></div>
+                    <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Audience</label><select className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-3 text-sm" value={trainingData.audience} onChange={e => setTrainingData({...trainingData, audience: e.target.value as 'all' | 'cohort' | 'direct'})}><option value="all">All Students</option><option value="cohort">Cohort Only</option><option value="direct">Direct Reports Only</option></select></div>
                     {taskCategory === 'module' && <div className="p-6 bg-[#F3EEE7]/5 rounded-xl border border-[#F3EEE7]/10 space-y-6"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><BookOpen className="w-4 h-4" /><p className="text-xs font-bold uppercase">Workbook Prompt</p></div><button type="button" onClick={() => setTrainingData({...trainingData, hasWorkbook: !trainingData.hasWorkbook})} className={`w-12 h-6 rounded-full relative flex items-center transition-colors ${trainingData.hasWorkbook ? 'bg-green-600' : 'bg-[#F3EEE7]/20'}`}><div className={`w-5 h-5 bg-white rounded-full transition-transform ${trainingData.hasWorkbook ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>{trainingData.hasWorkbook && <textarea className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-4 text-sm focus:border-[#FDD344] outline-none h-24" placeholder="Enter reflection question..." value={trainingData.workbookContent} onChange={e => setTrainingData({...trainingData, workbookContent: e.target.value})} />}</div>}
                   </div>
                 </div>

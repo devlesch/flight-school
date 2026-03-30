@@ -98,7 +98,7 @@ export async function getUserModules(userId: string): Promise<UserModule[]> {
 /**
  * Get modules with user progress combined
  */
-export async function getModulesWithProgress(userId: string): Promise<(TrainingModule & { progress?: UserModule })[]> {
+export async function getModulesWithProgress(userId: string, audienceFilter?: 'cohort' | 'direct' | 'both' | null): Promise<(TrainingModule & { progress?: UserModule })[]> {
   const [modules, userModules] = await Promise.all([
     getModules(),
     getUserModules(userId),
@@ -106,7 +106,16 @@ export async function getModulesWithProgress(userId: string): Promise<(TrainingM
 
   const progressMap = new Map(userModules.map(um => [um.module_id, um]));
 
-  return modules.map(module => ({
+  // Filter by audience if specified
+  const filtered = audienceFilter && audienceFilter !== 'both'
+    ? modules.filter(m => {
+        const audience = (m as any).audience as string | null;
+        if (!audience) return true; // null = all students
+        return audience === audienceFilter;
+      })
+    : modules;
+
+  return filtered.map(module => ({
     ...module,
     progress: progressMap.get(module.id),
   }));

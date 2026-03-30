@@ -378,11 +378,20 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
   const members: CohortMember[] = profiles.map(profile => {
     const userModules = modulesByUser.get(profile.id) || [];
     const progressMap = new Map(userModules.map(um => [um.module_id, um]));
+    const memberSource = sourceMap.get(profile.id) || 'cohort';
 
-    const completedCount = userModules.filter(um => um.completed).length;
-    const progress = allModules.length > 0 ? Math.round((completedCount / allModules.length) * 100) : 0;
+    // Filter modules by audience based on member's source
+    const filteredModules = allModules.filter((mod: any) => {
+      const audience = mod.audience as string | null;
+      if (!audience) return true; // null = all students
+      if (memberSource === 'both') return true; // both sees everything
+      return audience === memberSource; // match source to audience
+    });
 
-    const modules: UserModuleWithDetails[] = allModules.map(mod => {
+    const completedCount = userModules.filter(um => um.completed && filteredModules.some((m: any) => m.id === um.module_id)).length;
+    const progress = filteredModules.length > 0 ? Math.round((completedCount / filteredModules.length) * 100) : 0;
+
+    const modules: UserModuleWithDetails[] = filteredModules.map((mod: any) => {
       const userMod = progressMap.get(mod.id);
       const dueDate = new Date(new Date(startingDate + 'T00:00:00').getTime() + (mod.day_offset ?? 0) * 86400000)
         .toISOString().split('T')[0];

@@ -89,7 +89,20 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
   const myModules: TrainingModule[] = useMemo(() => {
     if (supabaseModules.length > 0) {
       const baseDate = cohortStartingDate || myProfile.startDate;
-      return supabaseModules.map(m => {
+      // Determine audience type: cohort if in a cohort, direct if has manager_id, both if both
+      const inCohort = !!cohortStartingDate;
+      const isDirect = !!myProfile.managerId;
+      const audienceType = inCohort && isDirect ? 'both' : inCohort ? 'cohort' : isDirect ? 'direct' : 'both';
+
+      // Filter modules by audience
+      const audienceFiltered = supabaseModules.filter(m => {
+        const audience = (m as any).audience as string | null;
+        if (!audience) return true; // null = all students
+        if (audienceType === 'both') return true;
+        return audience === audienceType;
+      });
+
+      return audienceFiltered.map(m => {
         // Compute due date from cohort starting date + module day_offset (same as manager view)
         const computedDueDate = m.day_offset != null && baseDate
           ? new Date(new Date(baseDate + 'T00:00:00').getTime() + m.day_offset * 86400000).toISOString().split('T')[0]
