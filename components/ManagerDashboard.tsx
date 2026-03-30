@@ -35,8 +35,19 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
   const { data: cohortData, loading: teamLoading } = useCohortTeam(user.id);
   const { tasks: supabaseTasks, loading: tasksLoading, toggleComplete } = useManagerTasks(user.id);
 
+  // Team filter
+  const [teamFilter, setTeamFilter] = useState<'all' | 'cohort' | 'direct'>('all');
+
   // Transform cohort members to NewHireProfile[] for existing UI components
-  const myHires: NewHireProfile[] = useMemo(() => {
+  const hireSourceMap = useMemo(() => {
+    const map = new Map<string, 'cohort' | 'direct' | 'both'>();
+    if (cohortData) {
+      for (const m of cohortData.members) map.set(m.profile.id, m.source);
+    }
+    return map;
+  }, [cohortData]);
+
+  const allHires: NewHireProfile[] = useMemo(() => {
     if (!cohortData || cohortData.members.length === 0) return [];
     return cohortData.members.map(member => {
       const p = member.profile;
@@ -65,6 +76,16 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
       };
     });
   }, [cohortData, user.id]);
+
+  const myHires = useMemo(() => {
+    if (teamFilter === 'all') return allHires;
+    return allHires.filter(h => {
+      const source = hireSourceMap.get(h.id);
+      if (teamFilter === 'cohort') return source === 'cohort' || source === 'both';
+      if (teamFilter === 'direct') return source === 'direct' || source === 'both';
+      return true;
+    });
+  }, [allHires, teamFilter, hireSourceMap]);
 
   // Cohort leaders for the reassign modal (excluding current user)
   const cohortLeaders = useMemo(() => {
@@ -711,15 +732,22 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
 
           {/* TEAM LIST SEARCH */}
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[#012d2e] p-6 rounded-xl border border-[#F3EEE7]/10">
-             <div className="relative w-full md:w-96">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#F3EEE7]/30" />
-                <input 
-                  type="text" 
-                  placeholder="Search your team..." 
-                  className="w-full bg-[#013E3F] border border-[#F3EEE7]/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-[#F3EEE7] focus:outline-none focus:ring-1 focus:ring-[#FDD344]/50"
-                  value={teamSearch}
-                  onChange={(e) => setTeamSearch(e.target.value)}
-                />
+             <div className="flex items-center gap-3">
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#F3EEE7]/30" />
+                  <input
+                    type="text"
+                    placeholder="Search your team..."
+                    className="w-full bg-[#013E3F] border border-[#F3EEE7]/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-[#F3EEE7] focus:outline-none focus:ring-1 focus:ring-[#FDD344]/50"
+                    value={teamSearch}
+                    onChange={(e) => setTeamSearch(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-1 p-1 bg-[#013E3F] rounded-lg">
+                  <button onClick={() => setTeamFilter('all')} className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors ${teamFilter === 'all' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/50 hover:text-[#F3EEE7]'}`}>All</button>
+                  <button onClick={() => setTeamFilter('cohort')} className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors ${teamFilter === 'cohort' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/50 hover:text-[#F3EEE7]'}`}>Cohort</button>
+                  <button onClick={() => setTeamFilter('direct')} className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors ${teamFilter === 'direct' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/50 hover:text-[#F3EEE7]'}`}>Direct</button>
+                </div>
              </div>
              <p className="text-[10px] font-bold uppercase text-[#F3EEE7]/40 tracking-widest">
                 Showing {myHires.filter(h => h.name.toLowerCase().includes(teamSearch.toLowerCase()) || h.title.toLowerCase().includes(teamSearch.toLowerCase())).length} team members

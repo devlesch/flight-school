@@ -21,6 +21,7 @@ export interface CohortMember {
   profile: Profile;
   progress: number;
   modules: UserModuleWithDetails[];
+  source: 'cohort' | 'direct' | 'both';
 }
 
 export interface ManagerCohortData {
@@ -323,13 +324,20 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     .eq('role', 'New Hire')
     .order('name', { ascending: true });
 
-  // Merge cohort slot members + direct reports, deduplicate by ID
+  // Merge cohort slot members + direct reports, deduplicate by ID, tag source
+  const cohortIds = new Set(cohortSlotMembers.map((p: any) => p.id));
+  const directIds = new Set((directReports || []).map((p: any) => p.id));
+  const sourceMap = new Map<string, 'cohort' | 'direct' | 'both'>();
+
   const seen = new Set<string>();
   const mergedProfiles: Profile[] = [];
   for (const p of [...cohortSlotMembers, ...(directReports || [])] as Profile[]) {
     if (!seen.has(p.id)) {
       seen.add(p.id);
       mergedProfiles.push(p);
+      const inCohort = cohortIds.has(p.id);
+      const inDirect = directIds.has(p.id);
+      sourceMap.set(p.id, inCohort && inDirect ? 'both' : inCohort ? 'cohort' : 'direct');
     }
   }
 
@@ -394,7 +402,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
       };
     });
 
-    return { profile, progress, modules };
+    return { profile, progress, modules, source: sourceMap.get(profile.id) || 'cohort' as const };
   });
 
   return { cohort, members, leaders };
