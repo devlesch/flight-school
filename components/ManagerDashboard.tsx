@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { User, NewHireProfile, WorkbookPrompt, ManagerTask, TrainingModule } from '../types';
+import { formatDate } from '../lib/formatDate';
 import { Slack, Mail, CheckSquare, Clock, AlertTriangle, MessageSquarePlus, ChevronRight, X, AlertCircle, CheckCircle, BookOpen, MessageCircle, Megaphone, ListTodo, Calendar, Timer, Info, Target, ArrowRight, LayoutDashboard, Eye, PlusCircle, Send, Users, UserCheck, ChevronLeft, ClipboardList, Briefcase, UserPlus, Search, Filter, UserCog, RefreshCw, Loader2 } from 'lucide-react';
 import { generateEmailDraft } from '../services/geminiService';
 import { useToast } from './Toast';
@@ -520,7 +521,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                                 <div className="flex items-center gap-2">
                                    <Calendar className={`w-4 h-4 ${isPreStart ? 'text-amber-500' : 'text-green-600'}`} />
                                    <span className={`text-sm font-bold ${isPreStart ? 'text-amber-600' : 'text-green-700'}`}>
-                                      {new Date(hire.startDate).toLocaleDateString()}
+                                      {formatDate(hire.startDate)}
                                       {isPreStart && <span className="ml-2 text-[9px] bg-amber-100 px-1.5 py-0.5 rounded">PRE-BOARDING</span>}
                                    </span>
                                 </div>
@@ -857,7 +858,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                             <div key={m.id} className="bg-white border border-red-100 p-4 rounded-lg shadow-sm flex justify-between items-center group hover:border-red-200 transition-colors">
                                 <div>
                                   <p className="font-bold text-red-700 text-sm mb-1">{m.title}</p>
-                                  <p className="text-xs text-red-400 font-medium">Due: {new Date(m.dueDate).toLocaleDateString()}</p>
+                                  <p className="text-xs text-red-400 font-medium">Due: {formatDate(m.dueDate)}</p>
                                 </div>
                                 <span className="bg-red-50 text-red-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide border border-red-100">Late</span>
                             </div>
@@ -912,7 +913,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                                   <td className="p-4 font-medium text-[#013E3F]">
                                     <div className="flex flex-col">
                                       <span>{m.title}</span>
-                                      {isOverdue && <span className="text-red-500 text-[10px] font-bold uppercase mt-1">Overdue since {new Date(m.dueDate).toLocaleDateString()}</span>}
+                                      {isOverdue && <span className="text-red-500 text-[10px] font-bold uppercase mt-1">Overdue since {formatDate(m.dueDate)}</span>}
                                     </div>
                                   </td>
                                   <td className="p-4 text-xs font-bold text-[#013E3F]/60">

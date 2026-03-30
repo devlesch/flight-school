@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, NewHireProfile, TrainingModule } from '../types';
+import { formatDate } from '../lib/formatDate';
 // Static UI content — intentionally kept as constant (not user data)
 import { UNIVERSAL_SERVICE_STEPS } from '../constants';
 import { CheckCircle, Circle, Video, FileText, ArrowRight, Slack, Megaphone, Target, ClipboardList, Users, UserCheck, BookOpen, X, Save, AtSign, Lightbulb, PenTool, MessageSquare, Quote, ChevronRight, Calendar as CalendarIcon, ChevronLeft, AlertTriangle, ArrowUpRight, PlayCircle, MapPin, LayoutDashboard, HeartHandshake, Eye, Star, Compass, ListOrdered, Info, Briefcase, MessageCircle, Globe, GraduationCap, LifeBuoy, User as UserIcon, Link as LinkIcon, ThumbsUp, Send, Timer, Loader2 } from 'lucide-react';
@@ -804,7 +805,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                         <div className="flex items-center gap-2 mb-2">
                            <img src={shout.avatar} alt={shout.from} className="w-6 h-6 rounded-full border border-[#013E3F]/10" />
                            <span className="text-xs font-bold uppercase">{shout.from}</span>
-                           <span className="text-[10px] text-[#013E3F]/50 ml-auto">{new Date(shout.date).toLocaleDateString()}</span>
+                           <span className="text-[10px] text-[#013E3F]/50 ml-auto">{formatDate(shout.date)}</span>
                         </div>
                         <p className="italic text-[#013E3F]/80 leading-snug">"{shout.message}"</p>
                      </div>
@@ -894,7 +895,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                       {nextUpTask ? (
                         <>
                           <h3 className="font-serif text-xl font-medium mb-1 truncate max-w-[250px]">{nextUpTask.title}</h3>
-                          <p className="text-sm opacity-70">Due {new Date(nextUpTask.dueDate).toLocaleDateString()}</p>
+                          <p className="text-sm opacity-70">Due {formatDate(nextUpTask.dueDate)}</p>
                         </>
                       ) : (
                         <h3 className="font-serif text-xl font-medium">All caught up!</h3>
@@ -1179,7 +1180,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                             </div>
                             <div className="flex items-center gap-2 text-xs font-bold text-[#013E3F]/50 uppercase tracking-widest mb-2">
                                <CalendarIcon className="w-3 h-3" />
-                               Due: {new Date(module.dueDate).toLocaleDateString()}
+                               Due: {formatDate(module.dueDate)}
                             </div>
                             
                             {/* Live Call Host Display */}
@@ -1219,7 +1220,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                                            <div key={comment.id} className="bg-white p-3 rounded border border-[#013E3F]/15 text-sm shadow-sm">
                                               <div className="flex justify-between items-center mb-1">
                                                  <span className="font-bold text-[#013E3F] text-xs uppercase">{comment.author}</span>
-                                                 <span className="text-[10px] text-[#013E3F]/40">{new Date(comment.date).toLocaleDateString()}</span>
+                                                 <span className="text-[10px] text-[#013E3F]/40">{formatDate(comment.date)}</span>
                                               </div>
                                               <p className="text-[#013E3F]/80">{comment.text}</p>
                                            </div>
@@ -1604,7 +1605,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                       <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider">
                         <span className="text-red-600 flex items-center gap-1">
                           <CalendarIcon className="w-3 h-3" />
-                          Missed: {new Date(module.dueDate).toLocaleDateString()}
+                          Missed: {formatDate(module.dueDate)}
                         </span>
                         <span className="text-[#013E3F]/40 flex items-center gap-1">
                           <Timer className="w-3 h-3" />
