@@ -458,7 +458,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
   const visibleModules = myModules.filter(module => {
     if (showIncompleteOnly && completedModules.has(module.id)) return false;
     return shouldShowModule(module);
-  });
+  }).sort((a, b) => new Date(a.dueDate + 'T00:00:00').getTime() - new Date(b.dueDate + 'T00:00:00').getTime());
 
   // --- CALENDAR LOGIC (WEEK AT A GLANCE) ---
   const getWeekDays = (date: Date) => {
