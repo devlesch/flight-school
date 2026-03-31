@@ -95,14 +95,21 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
       const audienceType = inCohort && isDirect ? 'both' : inCohort ? 'cohort' : isDirect ? 'direct' : 'both';
 
       // Filter modules by audience
-      const audienceFiltered = supabaseModules.filter(m => {
+      const userStdRole = supabaseProfile?.standardized_role || null;
+      const relevantModules = supabaseModules.filter(m => {
+        // Always show modules the user has interacted with (has user_modules record)
+        if (m.progress) return true;
+        // Filter by target_role if set
+        const targetRole = (m as any).target_role as string | null;
+        if (targetRole && userStdRole && targetRole !== userStdRole) return false;
+        // Filter by audience
         const audience = (m as any).audience as string | null;
         if (!audience) return true; // null = all students
         if (audienceType === 'both') return true;
         return audience === audienceType;
       });
 
-      return audienceFiltered.map(m => {
+      return relevantModules.map(m => {
         // Compute due date from cohort starting date + module day_offset (same as manager view)
         const computedDueDate = m.day_offset != null && baseDate
           ? new Date(new Date(baseDate + 'T00:00:00').getTime() + m.day_offset * 86400000).toISOString().split('T')[0]
