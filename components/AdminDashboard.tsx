@@ -205,7 +205,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   // Tasks view state
   const [allModules, setAllModules] = useState<DbTrainingModule[]>([]);
   const [modulesLoading, setModulesLoading] = useState(false);
-  const [taskFilters, setTaskFilters] = useState({ title: '', type: '', targetRole: '' });
+  const [taskFilters, setTaskFilters] = useState({ title: '', type: '', targetRole: '', audience: '' });
   const [agendaFilters, setAgendaFilters] = useState({ cohort: '', role: '' });
   const [showTaskBuilderModal, setShowTaskBuilderModal] = useState(false);
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
@@ -220,6 +220,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       if (taskFilters.title && !mod.title.toLowerCase().includes(taskFilters.title.toLowerCase())) return false;
       if (taskFilters.type && mod.type !== taskFilters.type) return false;
       if (taskFilters.targetRole && (mod.target_role || '') !== taskFilters.targetRole) return false;
+      if (taskFilters.audience) {
+        const modAudience = (mod as any).audience || 'all';
+        if (taskFilters.audience !== modAudience) return false;
+      }
       return true;
     });
   }, [allModules, taskFilters]);
@@ -1011,7 +1015,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                     <tbody className="divide-y divide-[#F3EEE7]">
                       {filteredRegistryUsers.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-8 py-16 text-center">
+                          <td colSpan={8} className="px-8 py-16 text-center">
                             <p className="text-sm font-bold text-[#013E3F]/40">No team members match the current filters</p>
                             <button
                               onClick={() => setRegistryFilters({ employee: '', role: '', manager: '', startDate: '', region: '', missingRegion: false, standardizedRole: '' })}
@@ -1113,7 +1117,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                 <Loader2 className="w-8 h-8 animate-spin mb-4" />
                 <p className="text-sm font-bold uppercase tracking-widest">Loading tasks…</p>
               </div>
-            ) : allModules.length === 0 && !taskFilters.title && !taskFilters.type && !taskFilters.targetRole ? (
+            ) : allModules.length === 0 && !taskFilters.title && !taskFilters.type && !taskFilters.targetRole && !taskFilters.audience ? (
               <div className="flex flex-col items-center justify-center py-20 text-[#013E3F]/40">
                 <ListTodo className="w-10 h-10 mb-4 opacity-30" />
                 <p className="text-sm font-bold uppercase tracking-widest">No tasks found</p>
@@ -1127,6 +1131,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                       <th className="px-8 py-4">Title</th>
                       <th className="px-8 py-4">Type</th>
                       <th className="px-8 py-4">Target Role</th>
+                      <th className="px-8 py-4">Audience</th>
                       <th className="px-8 py-4">Duration</th>
                       <th className="px-8 py-4">Host</th>
                       <th className="px-8 py-4">Link</th>
@@ -1174,7 +1179,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                           <option value="RD">RD</option>
                         </select>
                       </th>
-                      <th className="px-8 py-2"></th>
+                      <th className="px-8 py-2">
+                        <select
+                          value={taskFilters.audience}
+                          onChange={e => setTaskFilters(f => ({ ...f, audience: e.target.value }))}
+                          className="text-xs bg-white border border-[#013E3F]/15 rounded-md px-2 py-1.5 text-[#013E3F] focus:ring-1 focus:ring-[#013E3F] w-full font-normal normal-case tracking-normal outline-none"
+                        >
+                          <option value="">All</option>
+                          <option value="all">All Students</option>
+                          <option value="cohort">Cohort</option>
+                          <option value="direct">Direct Reports</option>
+                        </select>
+                      </th>
                       <th className="px-8 py-2"></th>
                       <th className="px-8 py-2"></th>
                       <th className="px-8 py-2"></th>
@@ -1183,10 +1199,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                   <tbody className="divide-y divide-[#F3EEE7]">
                     {filteredModules.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-8 py-16 text-center">
+                        <td colSpan={8} className="px-8 py-16 text-center">
                           <p className="text-sm font-bold text-[#013E3F]/40">No tasks match the current filters</p>
                           <button
-                            onClick={() => setTaskFilters({ title: '', type: '', targetRole: '' })}
+                            onClick={() => setTaskFilters({ title: '', type: '', targetRole: '', audience: '' })}
                             className="mt-3 text-xs font-bold uppercase tracking-wider text-[#013E3F]/60 hover:text-[#013E3F] underline underline-offset-2"
                           >
                             Clear filters
@@ -1210,6 +1226,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                           }`}>{mod.type.replace(/_/g, ' ')}</span>
                         </td>
                         <td className="px-8 py-5 text-xs text-[#013E3F]/60">{mod.target_role || 'All Roles'}</td>
+                        <td className="px-8 py-5 text-xs text-[#013E3F]/60">
+                          <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                            (mod as any).audience === 'cohort' ? 'bg-blue-50 text-blue-600' :
+                            (mod as any).audience === 'direct' ? 'bg-amber-50 text-amber-600' :
+                            'bg-[#F3EEE7] text-[#013E3F]/50'
+                          }`}>{(mod as any).audience === 'cohort' ? 'Cohort' : (mod as any).audience === 'direct' ? 'Direct' : 'All'}</span>
+                        </td>
                         <td className="px-8 py-5 text-xs text-[#013E3F]/60">{mod.duration || '—'}</td>
                         <td className="px-8 py-5 text-xs text-[#013E3F]/60">{mod.host || '—'}</td>
                         <td className="px-8 py-5 text-xs text-[#013E3F]/60">
