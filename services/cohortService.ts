@@ -260,63 +260,66 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     }
   }
 
-  if (leaderError || !resolvedLeaderRows || resolvedLeaderRows.length === 0) {
-    if (leaderError) console.error('Error fetching cohort leaders:', leaderError.message);
-    return null;
+  if (leaderError) {
+    console.error('Error fetching cohort leaders:', leaderError.message);
   }
 
-  // 2. Pick the most recent cohort by hire_start_date
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const withCohort = resolvedLeaderRows.filter((r: any) => r.cohorts);
-  if (withCohort.length === 0) return null;
+  // 2. Pick the most recent cohort (if any)
+  let cohort: Cohort | null = null;
+  let leaders: { leader: CohortLeader; profile: Profile }[] = [];
+  let cohortSlotMembers: Profile[] = [];
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  withCohort.sort((a: any, b: any) =>
-    new Date(b.cohorts.hire_start_date).getTime() - new Date(a.cohorts.hire_start_date).getTime()
-  );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cohort = (withCohort[0] as any).cohorts as Cohort;
-  // 3. Get all leaders for this cohort (with profiles)
-  const { data: allLeaders, error: leadersError } = await supabase
-    .from('cohort_leaders')
-    .select('*, profiles(*)')
-    .eq('cohort_id', cohort.id);
+  const withCohort = (resolvedLeaderRows || []).filter((r: any) => r.cohorts);
+  if (withCohort.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    withCohort.sort((a: any, b: any) =>
+      new Date(b.cohorts.hire_start_date).getTime() - new Date(a.cohorts.hire_start_date).getTime()
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    cohort = (withCohort[0] as any).cohorts as Cohort;
 
-  if (leadersError) {
-    console.error('Error fetching all cohort leaders:', leadersError.message);
+    // 3. Get all leaders for this cohort (with profiles)
+    const { data: allLeaders, error: leadersError } = await supabase
+      .from('cohort_leaders')
+      .select('*, profiles(*)')
+      .eq('cohort_id', cohort.id);
+
+    if (leadersError) {
+      console.error('Error fetching all cohort leaders:', leadersError.message);
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    leaders = (allLeaders || []).map((row: any) => ({
+      leader: { id: row.id, cohort_id: row.cohort_id, role_label: row.role_label, region: row.region, profile_id: row.profile_id, created_at: row.created_at } as CohortLeader,
+      profile: row.profiles as Profile,
+    }));
+
+    // 4. Get cohort members filtered by this manager's leader slot(s)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const managerSlots = (resolvedLeaderRows || [])
+      .filter((r: any) => r.cohorts && (r.cohorts as Cohort).id === cohort!.id)
+      .map((r: any) => ({ role_label: r.role_label as string, region: r.region as string }));
+
+    const { data: allCohortProfiles, error: membersError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'New Hire')
+      .gte('start_date', cohort.hire_start_date)
+      .lte('start_date', cohort.hire_end_date)
+      .not('start_date', 'is', null)
+      .order('name', { ascending: true });
+
+    if (membersError) {
+      console.error('Error fetching cohort members:', membersError.message);
+    }
+
+    cohortSlotMembers = ((allCohortProfiles || []) as Profile[]).filter((p: any) =>
+      managerSlots.some(slot => p.standardized_role === slot.role_label && p.region === slot.region)
+    );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const leaders = (allLeaders || []).map((row: any) => ({
-    leader: { id: row.id, cohort_id: row.cohort_id, role_label: row.role_label, region: row.region, profile_id: row.profile_id, created_at: row.created_at } as CohortLeader,
-    profile: row.profiles as Profile,
-  }));
-
-  // 4. Get cohort members filtered by this manager's leader slot(s): standardized_role + region
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const managerSlots = resolvedLeaderRows
-    .filter((r: any) => r.cohorts && (r.cohorts as Cohort).id === cohort.id)
-    .map((r: any) => ({ role_label: r.role_label as string, region: r.region as string }));
-
-  const { data: allCohortProfiles, error: membersError } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('role', 'New Hire')
-    .gte('start_date', cohort.hire_start_date)
-    .lte('start_date', cohort.hire_end_date)
-    .not('start_date', 'is', null)
-    .order('name', { ascending: true });
-
-  const cohortSlotMembers = (allCohortProfiles || []).filter((p: any) =>
-    managerSlots.some(slot => p.standardized_role === slot.role_label && p.region === slot.region)
-  );
-
-  if (membersError) {
-    console.error('Error fetching cohort members:', membersError.message);
-    return { cohort, members: [], leaders };
-  }
-
-  // Also fetch direct reports (manager_id = this manager)
+  // Always fetch direct reports (manager_id = this manager)
   const { data: directReports } = await supabase
     .from('profiles')
     .select('*')
@@ -325,7 +328,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     .order('name', { ascending: true });
 
   // Merge cohort slot members + direct reports, deduplicate by ID, tag source
-  const cohortIds = new Set(cohortSlotMembers.map((p: any) => p.id));
+  const cohortIds = new Set(cohortSlotMembers.map(p => p.id));
   const directIds = new Set((directReports || []).map((p: any) => p.id));
   const sourceMap = new Map<string, 'cohort' | 'direct' | 'both'>();
 
@@ -343,7 +346,14 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
 
   const profiles = mergedProfiles;
   if (profiles.length === 0) {
-    return { cohort, members: [], leaders };
+    // Return with cohort if available, or a placeholder
+    if (cohort) return { cohort, members: [], leaders };
+    return null;
+  }
+
+  // Use cohort if available, otherwise create a placeholder for direct-reports-only managers
+  if (!cohort) {
+    cohort = { id: '', name: 'Direct Reports', hire_start_date: '', hire_end_date: '', starting_date: null, created_at: '' } as Cohort;
   }
 
   // 5. Get all training modules
