@@ -233,6 +233,7 @@ export async function isUserCohortLeader(userId: string): Promise<boolean> {
  * Resolves: manager → cohort_leaders → cohort (most recent) → profiles by date range → user_modules + training_modules
  */
 export async function getCohortMembersForManager(managerId: string): Promise<ManagerCohortData | null> {
+ try {
   // 1. Find cohorts this manager leads (by profile_id directly, or by email match for provisioned profiles)
   const { data: leaderRows, error: leaderError } = await supabase
     .from('cohort_leaders')
@@ -320,12 +321,14 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
   }
 
   // Always fetch direct reports (manager_id = this manager)
-  const { data: directReports } = await supabase
+  const { data: directReports, error: directError } = await supabase
     .from('profiles')
     .select('*')
     .eq('manager_id', managerId)
     .eq('role', 'New Hire')
     .order('name', { ascending: true });
+
+  console.log('[CohortService] managerId:', managerId, 'directReports:', directReports?.length, 'error:', directError?.message, 'cohortSlotMembers:', cohortSlotMembers.length);
 
   // Merge cohort slot members + direct reports, deduplicate by ID, tag source
   const cohortIds = new Set(cohortSlotMembers.map(p => p.id));
@@ -403,8 +406,9 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
 
     const modules: UserModuleWithDetails[] = filteredModules.map((mod: any) => {
       const userMod = progressMap.get(mod.id);
-      const dueDate = new Date(new Date(startingDate + 'T00:00:00').getTime() + (mod.day_offset ?? 0) * 86400000)
-        .toISOString().split('T')[0];
+      const baseDate = startingDate || profile.start_date || new Date().toISOString().split('T')[0];
+      const dueDateObj = new Date(new Date(baseDate + 'T00:00:00').getTime() + (mod.day_offset ?? 0) * 86400000);
+      const dueDate = isNaN(dueDateObj.getTime()) ? new Date().toISOString().split('T')[0] : dueDateObj.toISOString().split('T')[0];
 
       return {
         id: userMod?.id || mod.id,
@@ -424,5 +428,10 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     return { profile, progress, modules, source: sourceMap.get(profile.id) || 'cohort' as const };
   });
 
-  return { cohort, members, leaders };
+  console.log('[CohortService] RETURNING members:', members.length, 'cohort:', cohort?.name);
+  return { cohort: cohort!, members, leaders };
+} catch (err) {
+  console.error('[CohortService] CRASH:', err);
+  return null;
+}
 }

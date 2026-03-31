@@ -32,6 +32,7 @@ const QUESTION_LABELS: Record<string, string> = {
 const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, onTabChange }) => {
   const toast = useToast();
   // Cohort-based team data
+  console.log('[ManagerDashboard] user.id:', user.id, 'user.name:', user.name);
   const { data: cohortData, loading: teamLoading } = useCohortTeam(user.id);
   const { tasks: supabaseTasks, loading: tasksLoading, toggleComplete } = useManagerTasks(user.id);
 
@@ -48,6 +49,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
   }, [cohortData]);
 
   const allHires: NewHireProfile[] = useMemo(() => {
+    console.log('[ManagerDashboard] cohortData:', cohortData ? `members: ${cohortData.members.length}` : 'null');
     if (!cohortData || cohortData.members.length === 0) return [];
     return cohortData.members.map(member => {
       const p = member.profile;
