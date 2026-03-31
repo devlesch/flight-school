@@ -96,6 +96,25 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
 
       // Filter modules by audience
       const userStdRole = supabaseProfile?.standardized_role || null;
+      const userRole = supabaseProfile?.role || 'New Hire';
+
+      // Non-New Hire users (managers viewing their student view) only see modules explicitly assigned to them
+      if (userRole !== 'New Hire') {
+        const assignedOnly = supabaseModules.filter(m => m.progress);
+        return assignedOnly.map(m => {
+          const computedDueDate = m.day_offset != null && baseDate
+            ? new Date(new Date(baseDate + 'T00:00:00').getTime() + m.day_offset * 86400000).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0];
+          return {
+            id: m.id, title: m.title, description: m.description || '', type: m.type as TrainingModule['type'],
+            duration: m.duration || '', completed: m.progress?.completed || false,
+            dueDate: m.progress?.due_date || computedDueDate, link: m.link || undefined,
+            score: m.progress?.score || undefined, host: m.host || undefined,
+            liked: m.progress?.liked || false, likes: m.progress?.liked ? 1 : 0,
+          };
+        });
+      }
+
       const relevantModules = supabaseModules.filter(m => {
         // Always show modules the user has interacted with (has user_modules record)
         if (m.progress) return true;
