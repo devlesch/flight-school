@@ -364,6 +364,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
   const { data: trainingModules } = await supabase
     .from('training_modules')
     .select('*')
+    .is('deleted_at', null)
     .order('sort_order', { ascending: true });
 
   const allModules = (trainingModules || []) as TrainingModule[];

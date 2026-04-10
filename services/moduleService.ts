@@ -47,11 +47,17 @@ export async function updateModule(
 /**
  * Get all training module definitions
  */
-export async function getModules(): Promise<TrainingModule[]> {
-  const { data, error } = await supabase
+export async function getModules(includeDeleted = false): Promise<TrainingModule[]> {
+  let query = supabase
     .from('training_modules')
     .select('*')
     .order('sort_order', { ascending: true });
+
+  if (!includeDeleted) {
+    query = query.is('deleted_at', null);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching modules:', error.message);
@@ -59,6 +65,40 @@ export async function getModules(): Promise<TrainingModule[]> {
   }
 
   return data as TrainingModule[];
+}
+
+/**
+ * Soft delete a training module (sets deleted_at)
+ */
+export async function deleteModule(id: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('training_modules')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error deleting module:', error.message);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Restore a soft-deleted training module
+ */
+export async function restoreModule(id: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('training_modules')
+    .update({ deleted_at: null })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error restoring module:', error.message);
+    return false;
+  }
+  return true;
 }
 
 /**

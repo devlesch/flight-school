@@ -88,6 +88,7 @@ export interface Database {
           target_role: string | null;
           day_offset: number;
           audience: string | null;
+          deleted_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -102,6 +103,7 @@ export interface Database {
           target_role?: string | null;
           day_offset?: number;
           audience?: string | null;
+          deleted_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -116,6 +118,7 @@ export interface Database {
           target_role?: string | null;
           day_offset?: number;
           audience?: string | null;
+          deleted_at?: string | null;
           created_at?: string;
         };
       };

@@ -7,7 +7,7 @@ import type { Profile, TrainingModule as DbTrainingModule, ModuleType } from '..
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, LabelList, PieChart as RePieChart, Pie, Tooltip, LineChart, Line, AreaChart, Area } from 'recharts';
 import { Mail, Calendar, TrendingUp, CheckCircle, AlertCircle, FileText, Loader2, Wand2, UploadCloud, Video, ArrowRight, X, Users, Plus, Clock, MessageSquare, Zap, PieChart, Settings, Palette, UserCheck, Search, Send, ChevronLeft, ChevronRight, MessageCircle, Globe, AtSign, Filter, BarChart2, MousePointer2, Check, UserMinus, ArrowLeft, Slack, ClipboardCheck, Info, Target, LayoutDashboard, Star, ShieldCheck, UserCog, UserPlus, ZapOff, Activity, History, HelpCircle, FileUp, Building2, UserCircle, Save, Briefcase, RefreshCw, Edit3, BookOpen, Layers, UserPlus2, UserCheck2, HelpCircle as HelpIcon, Timer, ListTodo } from 'lucide-react';
 import { analyzeProgress, ExtractedHireData, generateManagerNotification, generateEmailDraft, generateManagerDraft } from '../services/geminiService';
-import { createModule, getModules, updateModule, getUserModulesBatch } from '../services/moduleService';
+import { createModule, getModules, updateModule, deleteModule, restoreModule, getUserModulesBatch } from '../services/moduleService';
 import type { UserModule as DbUserModule } from '../types/database';
 import { createCohort, updateCohort, LEADER_ROLE_MAP, upsertCohortLeader } from '../services/cohortService';
 import { parseWorkdayExcel, importWorkdayData, ImportResult } from '../services/workdayImportService';
@@ -209,14 +209,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [agendaFilters, setAgendaFilters] = useState({ cohort: '', role: '' });
   const [showTaskBuilderModal, setShowTaskBuilderModal] = useState(false);
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
+  const [showDeletedTasks, setShowDeletedTasks] = useState(false);
+  const [confirmDeleteModuleId, setConfirmDeleteModuleId] = useState<string | null>(null);
 
   useEffect(() => {
     setModulesLoading(true);
-    getModules().then(data => { setAllModules(data); setModulesLoading(false); });
+    getModules(true).then(data => { setAllModules(data); setModulesLoading(false); });
   }, []);
+
+  // Active modules (excludes deleted) — used for calendar, stats, drilldown
+  const activeModules = useMemo(() => allModules.filter(m => !(m as any).deleted_at), [allModules]);
 
   const filteredModules = useMemo(() => {
     return allModules.filter(mod => {
+      if (!showDeletedTasks && (mod as any).deleted_at) return false;
       if (taskFilters.title && !mod.title.toLowerCase().includes(taskFilters.title.toLowerCase())) return false;
       if (taskFilters.type && mod.type !== taskFilters.type) return false;
       if (taskFilters.targetRole && (mod.target_role || '') !== taskFilters.targetRole) return false;
@@ -226,7 +232,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       }
       return true;
     });
-  }, [allModules, taskFilters]);
+  }, [allModules, taskFilters, showDeletedTasks]);
 
   const COHORT_COLORS = [
     { bg: 'bg-[#dcfce7]', text: 'text-[#166534]', border: 'border-[#166534]' },
@@ -261,7 +267,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     cohorts.forEach((cohort, idx) => {
       if (!cohort.starting_date) return;
       const start = new Date(cohort.starting_date + 'T00:00:00');
-      for (const mod of allModules) {
+      for (const mod of activeModules) {
         const taskDate = new Date(start);
         taskDate.setDate(taskDate.getDate() + (mod.day_offset ?? 0));
         computed.push({
@@ -606,7 +612,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
         setTaskSuccess(false);
         setEditingModuleId(null);
         setShowTaskBuilderModal(false);
-        getModules().then(data => setAllModules(data));
+        getModules(true).then(data => setAllModules(data));
       }, 1500);
     } else {
       setTaskError(editingModuleId ? 'Failed to update task. Please try again.' : 'Failed to save task. Please try again.');
@@ -1111,6 +1117,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
               >
                 <Plus className="w-4 h-4" /> New Task
               </button>
+              <button
+                onClick={() => setShowDeletedTasks(!showDeletedTasks)}
+                className={`px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors ${showDeletedTasks ? 'bg-red-100 text-red-600 border border-red-200' : 'text-[#013E3F]/40 hover:text-[#013E3F] border border-[#013E3F]/10'}`}
+              >
+                {showDeletedTasks ? 'Hide Deleted' : 'Show Deleted'}
+              </button>
             </div>
             {modulesLoading ? (
               <div className="flex flex-col items-center justify-center py-20 text-[#013E3F]/40">
@@ -1209,10 +1221,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                           </button>
                         </td>
                       </tr>
-                    ) : filteredModules.map(mod => (
-                      <tr key={mod.id} onClick={() => openEditModal(mod)} className="hover:bg-[#F9F7F5] transition-colors cursor-pointer">
+                    ) : filteredModules.map(mod => {
+                      const isDeleted = !!(mod as any).deleted_at;
+                      return (
+                      <tr key={mod.id} onClick={() => !isDeleted && openEditModal(mod)} className={`transition-colors ${isDeleted ? 'opacity-50 bg-red-50/30' : 'hover:bg-[#F9F7F5] cursor-pointer'}`}>
                         <td className="px-8 py-5">
-                          <p className="font-serif font-bold text-[#013E3F]">{mod.title}</p>
+                          <div className="flex items-center gap-2">
+                            <p className={`font-serif font-bold text-[#013E3F] ${isDeleted ? 'line-through' : ''}`}>{mod.title}</p>
+                            {isDeleted && <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-red-100 text-red-600">Deleted</span>}
+                            {isDeleted && <button onClick={(e) => { e.stopPropagation(); restoreModule(mod.id).then(ok => ok && getModules(true).then(setAllModules)); }} className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors">Restore</button>}
+                          </div>
                           {mod.description && <p className="text-[10px] text-[#013E3F]/40 mt-0.5">{mod.description}</p>}
                         </td>
                         <td className="px-8 py-5">
@@ -1244,7 +1262,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                         </td>
                         <td className="px-8 py-5 text-xs text-[#013E3F]/60">{formatDate(mod.created_at)}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1285,10 +1304,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                     {taskCategory === 'module' && <div className="p-6 bg-[#F3EEE7]/5 rounded-xl border border-[#F3EEE7]/10 space-y-6"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><BookOpen className="w-4 h-4" /><p className="text-xs font-bold uppercase">Workbook Prompt</p></div><button type="button" onClick={() => setTrainingData({...trainingData, hasWorkbook: !trainingData.hasWorkbook})} className={`w-12 h-6 rounded-full relative flex items-center transition-colors ${trainingData.hasWorkbook ? 'bg-green-600' : 'bg-[#F3EEE7]/20'}`}><div className={`w-5 h-5 bg-white rounded-full transition-transform ${trainingData.hasWorkbook ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>{trainingData.hasWorkbook && <textarea className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-4 text-sm focus:border-[#FDD344] outline-none h-24" placeholder="Enter reflection question..." value={trainingData.workbookContent} onChange={e => setTrainingData({...trainingData, workbookContent: e.target.value})} />}</div>}
                   </div>
                 </div>
-                <div className="pt-8 border-t border-[#F3EEE7]/10 flex flex-col items-end gap-3">
+                <div className="pt-8 border-t border-[#F3EEE7]/10 flex items-center gap-3">
+                  {editingModuleId && (
+                    <button type="button" onClick={() => setConfirmDeleteModuleId(editingModuleId)} className="px-6 py-3 rounded-xl font-bold uppercase text-xs border border-red-400/30 text-red-400 hover:bg-red-400/10 transition-colors">Delete</button>
+                  )}
+                  <div className="flex-1" />
                   <button type="submit" disabled={submitting || taskSuccess} className={`px-12 py-3 rounded-xl font-bold uppercase text-xs transition-colors ${taskSuccess ? 'bg-green-600 text-white' : 'bg-[#FDD344] text-[#013E3F]'}`}>{taskSuccess ? (editingModuleId ? '✓ Task Updated' : '✓ Task Assigned') : submitting ? 'Saving...' : (editingModuleId ? 'Update Task' : 'Assign Resource')}</button>
                   {taskError && <p className="text-red-400 text-xs">{taskError}</p>}
                 </div>
+                {confirmDeleteModuleId && (
+                  <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+                    <p className="text-sm text-red-800 mb-3">Are you sure you want to delete <strong>{trainingData.title}</strong>? This module will be hidden from all student and manager views. Student progress is preserved.</p>
+                    <div className="flex gap-2 justify-end">
+                      <button type="button" onClick={() => setConfirmDeleteModuleId(null)} className="px-4 py-2 text-xs font-bold uppercase rounded-lg border text-[#013E3F] hover:bg-gray-50">Cancel</button>
+                      <button type="button" onClick={async () => {
+                        const ok = await deleteModule(confirmDeleteModuleId);
+                        if (ok) {
+                          toast.success('Task deleted.');
+                          setConfirmDeleteModuleId(null);
+                          setShowTaskBuilderModal(false);
+                          setEditingModuleId(null);
+                          getModules(true).then(setAllModules);
+                        } else {
+                          toast.error('Failed to delete task.');
+                        }
+                      }} className="px-4 py-2 text-xs font-bold uppercase rounded-lg bg-red-600 text-white hover:bg-red-700">Delete</button>
+                    </div>
+                  </div>
+                )}
               </form>
             </div>
           </div>
@@ -1570,7 +1613,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                            ? Math.round(slotMembers.reduce((acc, m) => {
                                const prog = userProgressMap[m.id] || [];
                                const completed = prog.filter(p => p.completed).length;
-                               return acc + (allModules.length > 0 ? (completed / allModules.length) * 100 : 0);
+                               return acc + (activeModules.length > 0 ? (completed / activeModules.length) * 100 : 0);
                              }, 0) / memberCount)
                            : 0;
                          const today = new Date().toISOString().split('T')[0];
@@ -1607,8 +1650,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                            {slotMembers.map(profile => {
                              const userProgress = userProgressMap[profile.id] || [];
                              const completedCount = userProgress.filter(up => up.completed).length;
-                             const progress = allModules.length > 0
-                               ? Math.round((completedCount / allModules.length) * 100)
+                             const progress = activeModules.length > 0
+                               ? Math.round((completedCount / activeModules.length) * 100)
                                : 0;
                              const avatarUrl = profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=013E3F&color=F3EEE7`;
                              return (
@@ -1616,7 +1659,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                                 const cohortStart = selectedCohortData?.starting_date;
                                 const memberProgress = userProgressMap[profile.id] || [];
                                 const progressByModuleId = new Map(memberProgress.map(p => [p.module_id, p]));
-                                const userModules = allModules
+                                const userModules = activeModules
                                   .map(mod => {
                                     const prog = progressByModuleId.get(mod.id);
                                     const dueDate = cohortStart
