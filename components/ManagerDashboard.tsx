@@ -451,16 +451,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
           </p>
         </div>
         
-        {/* TAB SWITCHER */}
-        <div className="flex bg-[#012d2e] p-1 rounded-xl shadow-inner border border-[#F3EEE7]/10">
-           <button 
-             onClick={() => setActiveTab('team')}
-             className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'team' ? 'bg-[#FDD344] text-[#013E3F] shadow-lg' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7]'}`}
-           >
-              <Users className="w-4 h-4" /> My Team
-           </button>
-{/* Tracker tab hidden */}
-        </div>
+        {/* Tab switcher hidden — only one tab */}
       </div>
 
       {/* --- TRACKER VIEW --- */}
