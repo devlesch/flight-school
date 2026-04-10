@@ -15,6 +15,7 @@ export interface UserModuleWithDetails {
   dueDate: string;
   link: string | null;
   host: string | null;
+  score: number | null;
 }
 
 export interface CohortMember {
@@ -422,6 +423,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
         dueDate,
         link: mod.link || null,
         host: mod.host || null,
+        score: userMod?.score ?? null,
       };
     });
 

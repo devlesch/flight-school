@@ -49,8 +49,9 @@ export async function syncLessonlyStatus(
     const isCompletedInLessonly = lessonStatus.status === 'Completed';
 
     // Sync mismatches in either direction
+    const lessonScore = lessonStatus.score ?? undefined;
     if (isCompletedInLessonly && !mod.completed) {
-      updateModuleProgress(userId, mod.id, { completed: true });
+      updateModuleProgress(userId, mod.id, { completed: true, score: lessonScore });
     } else if (!isCompletedInLessonly && mod.completed) {
       updateModuleProgress(userId, mod.id, { completed: false });
     }

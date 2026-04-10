@@ -74,6 +74,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
           dueDate: m.dueDate,
           link: m.link || undefined,
           host: m.host || undefined,
+          score: m.score || undefined,
         })),
       };
     });
@@ -926,6 +927,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                             <tr>
                               <th className="p-4">Module</th>
                               <th className="p-4">Lead/Host</th>
+                              <th className="p-4 text-center">Score</th>
                               <th className="p-4 text-right">Status</th>
                             </tr>
                           </thead>
@@ -954,6 +956,9 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                                         </button>
                                       )}
                                     </div>
+                                  </td>
+                                  <td className="p-4 text-center">
+                                    {m.score != null ? <span className="text-xs font-bold text-[#013E3F]">{m.score}%</span> : <span className="text-xs text-[#013E3F]/20">—</span>}
                                   </td>
                                   <td className="p-4 text-right">
                                     {m.completed ? (

@@ -1632,6 +1632,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                                       dueDate,
                                       link: mod.link || undefined,
                                       host: mod.host || undefined,
+                                      score: prog?.score || undefined,
                                     };
                                   });
                                 const modalProgress = userModules.length > 0
@@ -1947,6 +1948,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                             <tr>
                               <th className="p-4">Module</th>
                               <th className="p-4">Lead/Host</th>
+                              <th className="p-4 text-center">Score</th>
                               <th className="p-4 text-right">Status</th>
                             </tr>
                           </thead>
@@ -1962,6 +1964,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                                     </div>
                                   </td>
                                   <td className="p-4 text-xs font-bold text-[#013E3F]/60">{m.host || 'General Manager'}</td>
+                                  <td className="p-4 text-center">
+                                    {m.score != null ? <span className="text-xs font-bold text-[#013E3F]">{m.score}%</span> : <span className="text-xs text-[#013E3F]/20">—</span>}
+                                  </td>
                                   <td className="p-4 text-right">
                                     {m.completed ? (
                                       <span className="text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">Complete</span>

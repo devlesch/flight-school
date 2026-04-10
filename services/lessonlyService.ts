@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 export interface LessonlyStatus {
   status: 'Completed' | 'Incomplete' | 'not_found';
   completed_at: string | null;
+  score: number | null;
 }
 
 export interface LessonlyStatusResponse {

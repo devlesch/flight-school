@@ -34,6 +34,8 @@ Deno.serve(async (req: Request) => {
     const userEmail = (payload.user?.email || payload.email || '').toLowerCase();
     const lessonId = payload.lesson?.id || payload.lesson_id;
     const completedDate = payload.completed_date || payload.completed_at || new Date().toISOString();
+    const scoreRaw = payload.score_percent ?? payload.retake_score ?? null;
+    const score = scoreRaw != null ? Math.round(scoreRaw) : null;
 
     if (!userEmail || !lessonId) {
       return jsonResponse({ success: false, error: 'Missing user email or lesson ID in payload' }, 400);
@@ -87,15 +89,18 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (existing?.completed) {
-      // Already marked complete — nothing to do
-      return jsonResponse({ success: true, already_completed: true });
+      // Already complete — but update score if provided (handles retakes)
+      if (score != null) {
+        await supabase.from('user_modules').update({ score }).eq('id', existing.id);
+      }
+      return jsonResponse({ success: true, already_completed: true, score_updated: score != null });
     }
 
     if (existing) {
       // Update existing record
       const { error: updateError } = await supabase
         .from('user_modules')
-        .update({ completed: true, completed_at: completedDate })
+        .update({ completed: true, completed_at: completedDate, ...(score != null && { score }) })
         .eq('id', existing.id);
 
       if (updateError) {
@@ -110,6 +115,7 @@ Deno.serve(async (req: Request) => {
           module_id: matchingModule.id,
           completed: true,
           completed_at: completedDate,
+          ...(score != null && { score }),
         });
 
       if (insertError) {

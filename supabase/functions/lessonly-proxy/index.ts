@@ -120,16 +120,17 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const statuses: Record<number, { status: string; completed_at: string | null }> = {};
+    const statuses: Record<number, { status: string; completed_at: string | null; score: number | null }> = {};
     for (const lessonId of lessonIds) {
       const assignment = assignmentMap.get(lessonId);
       if (assignment) {
         statuses[lessonId] = {
           status: assignment.status,
           completed_at: assignment.completed_at,
+          score: assignment.score ?? null,
         };
       } else {
-        statuses[lessonId] = { status: 'not_found', completed_at: null };
+        statuses[lessonId] = { status: 'not_found', completed_at: null, score: null };
       }
     }
 
