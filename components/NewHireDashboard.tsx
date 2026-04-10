@@ -1272,7 +1272,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                                      <input
                                        type="text"
                                        placeholder="Add a comment..."
-                                       className="flex-1 text-sm p-2 border border-[#013E3F]/30 rounded focus:outline-none focus:border-[#013E3F]"
+                                       className="flex-1 text-sm p-2 border border-[#013E3F]/30 rounded focus:outline-none focus:border-[#013E3F] text-[#013E3F]"
                                        value={commentDrafts[module.id] || ''}
                                        onChange={(e) => setCommentDrafts({...commentDrafts, [module.id]: e.target.value})}
                                        onKeyDown={(e) => e.key === 'Enter' && handlePostComment(module)}
