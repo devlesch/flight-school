@@ -1055,7 +1055,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                             </select>
                           </td>
                           <td className="px-8 py-5 text-xs font-bold text-[#013E3F]/60">{profile.manager_id ? allUsers.find(u => u.id === profile.manager_id)?.name || '—' : '—'}</td>
-                          <td className="px-8 py-5 text-xs text-[#013E3F]/60">{profile.start_date || '—'}</td>
+                          <td className="px-8 py-5 text-xs text-[#013E3F]/60">{profile.start_date ? formatDate(profile.start_date) : '—'}</td>
                           <td className="px-8 py-5">
                             <select
                               value={profile.region || ''}

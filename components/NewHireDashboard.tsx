@@ -1085,7 +1085,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                    </div>
                    <div className="flex items-center gap-4">
                       <span className="text-sm font-bold uppercase tracking-wider">
-                         {weekStart.toLocaleDateString('default', { month: 'short', day: 'numeric' })} - {weekEnd.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })}
+                         {weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
                       <div className="flex bg-[#013E3F]/10 rounded-lg">
                         <button onClick={() => changeWeek(-1)} className="p-2 hover:bg-[#013E3F]/20 rounded-l-lg transition-colors"><ChevronLeft className="w-4 h-4" /></button>
@@ -1121,7 +1121,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                 <div className="grid grid-cols-7 bg-[#F3EEE7] border-b border-[#013E3F]/10">
                   {weekDays.map(day => (
                     <div key={day.toString()} className="py-2 text-center text-xs font-bold uppercase tracking-wide text-[#013E3F]/60">
-                      {day.toLocaleDateString('default', { weekday: 'short' })}
+                      {day.toLocaleDateString('en-US', { weekday: 'short' })}
                     </div>
                   ))}
                 </div>
