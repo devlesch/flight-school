@@ -1103,26 +1103,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                   <strong>All Tasks:</strong> Training modules and calls created via the Task Builder.
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  setEditingModuleId(null);
-                  setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', audience: 'all', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
-                  setTaskCategory('module');
-                  setLink('');
-                  setTaskError(null);
-                  setTaskSuccess(false);
-                  setShowTaskBuilderModal(true);
-                }}
-                className="flex items-center gap-2 bg-[#013E3F] text-[#FDD344] px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#013E3F]/80 transition-colors shadow-md"
-              >
-                <Plus className="w-4 h-4" /> New Task
-              </button>
-              <button
-                onClick={() => setShowDeletedTasks(!showDeletedTasks)}
-                className={`px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors ${showDeletedTasks ? 'bg-red-100 text-red-600 border border-red-200' : 'text-[#013E3F]/40 hover:text-[#013E3F] border border-[#013E3F]/10'}`}
-              >
-                {showDeletedTasks ? 'Hide Deleted' : 'Show Deleted'}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowDeletedTasks(!showDeletedTasks)}
+                  className={`px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors ${showDeletedTasks ? 'bg-red-100 text-red-600 border border-red-200' : 'text-[#013E3F]/40 hover:text-[#013E3F] border border-[#013E3F]/10'}`}
+                >
+                  {showDeletedTasks ? 'Hide Deleted' : 'Show Deleted'}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingModuleId(null);
+                    setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', audience: 'all', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
+                    setTaskCategory('module');
+                    setLink('');
+                    setTaskError(null);
+                    setTaskSuccess(false);
+                    setShowTaskBuilderModal(true);
+                  }}
+                  className="flex items-center gap-2 bg-[#013E3F] text-[#FDD344] px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#013E3F]/80 transition-colors shadow-md"
+                >
+                  <Plus className="w-4 h-4" /> New Task
+                </button>
+              </div>
             </div>
             {modulesLoading ? (
               <div className="flex flex-col items-center justify-center py-20 text-[#013E3F]/40">
