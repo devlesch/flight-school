@@ -590,6 +590,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
 
     const payload = {
       title: trainingData.title,
+      description: trainingData.description || null,
       type: (taskCategory === 'call' ? 'LIVE_CALL' : trainingData.method) as ModuleType,
       link: link || null,
       target_role: trainingData.targetRole === 'All Roles' ? null : trainingData.targetRole,
@@ -1293,6 +1294,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                   <div className="space-y-8">
                     <h4 className="text-[11px] font-bold uppercase text-[#F3EEE7]/40 tracking-[3px] border-b border-[#F3EEE7]/10 pb-2">Structure</h4>
                     <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Module Title</label><input required className="w-full bg-[#013E3F] border-b border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" placeholder="Member Crisis Resolution" value={trainingData.title} onChange={e => setTrainingData({...trainingData, title: e.target.value})} /></div>
+                    <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Description</label><textarea className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2 px-3 rounded-lg text-sm h-20 resize-none" placeholder="Brief description of this module..." value={trainingData.description} onChange={e => setTrainingData({...trainingData, description: e.target.value})} /></div>
                     <div className="grid grid-cols-2 gap-6">
                       {taskCategory === 'module' && <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80" htmlFor="method-select">Method</label><select id="method-select" aria-label="Method" className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-3 text-sm" value={trainingData.method} onChange={e => setTrainingData({...trainingData, method: e.target.value as any})}><option value="MANAGER_LED">Manager Led</option><option value="LESSONLY">Lessonly</option><option value="WORKBOOK">Self-Led Workbook</option><option value="LIVE_CALL">Hosted Training</option><option value="PERFORM">Perform (#Ownership)</option><option value="PEER_PARTNER">Peer Partner</option></select></div>}
                       <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Day Offset</label><input type="number" className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-3 text-sm" value={trainingData.assignmentDay} onChange={e => setTrainingData({...trainingData, assignmentDay: parseInt(e.target.value)})} /></div>
