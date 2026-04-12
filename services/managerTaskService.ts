@@ -36,6 +36,7 @@ export async function createTaskTemplate(data: {
   description?: string | null;
   due_date_offset: number;
   time_estimate?: string | null;
+  link?: string | null;
 }): Promise<ManagerTaskTemplate | null> {
   // Auto-assign sort_order
   const templates = await getTaskTemplates(true);
@@ -60,7 +61,7 @@ export async function createTaskTemplate(data: {
  */
 export async function updateTaskTemplate(
   id: string,
-  data: { title?: string; description?: string | null; due_date_offset?: number; time_estimate?: string | null }
+  data: { title?: string; description?: string | null; due_date_offset?: number; time_estimate?: string | null; link?: string | null }
 ): Promise<ManagerTaskTemplate | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: updated, error } = await (supabase as any)

@@ -220,7 +220,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [showDeletedManagerTasks, setShowDeletedManagerTasks] = useState(false);
   const [confirmDeleteTemplateId, setConfirmDeleteTemplateId] = useState<string | null>(null);
-  const [managerTaskData, setManagerTaskData] = useState({ title: '', description: '', dueOffset: 0, timeEstimate: '' });
+  const [managerTaskData, setManagerTaskData] = useState({ title: '', description: '', dueOffset: 0, timeEstimate: '', link: '' });
   const [managerTaskSearch, setManagerTaskSearch] = useState('');
   const [managerTaskSubmitting, setManagerTaskSubmitting] = useState(false);
   const [managerTaskSuccess, setManagerTaskSuccess] = useState(false);
@@ -2461,7 +2461,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                 <button
                   onClick={() => {
                     setEditingTemplateId(null);
-                    setManagerTaskData({ title: '', description: '', dueOffset: 0, timeEstimate: '' });
+                    setManagerTaskData({ title: '', description: '', dueOffset: 0, timeEstimate: '', link: '' });
                     setManagerTaskError(null);
                     setManagerTaskSuccess(false);
                     setConfirmDeleteTemplateId(null);
@@ -2485,6 +2485,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                       <th className="px-8 py-4">Title</th>
                       <th className="px-8 py-4">Day Offset</th>
                       <th className="px-8 py-4">Time Estimate</th>
+                      <th className="px-8 py-4">Link</th>
                       <th className="px-8 py-4">Created</th>
                     </tr>
                     <tr className="bg-white border-b border-[#013E3F]/10">
@@ -2498,14 +2499,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                   </thead>
                   <tbody className="divide-y divide-[#F3EEE7]">
                     {filteredManagerTemplates.length === 0 ? (
-                      <tr><td colSpan={4} className="px-8 py-16 text-center"><p className="text-sm font-bold text-[#013E3F]/40">No templates found</p></td></tr>
+                      <tr><td colSpan={5} className="px-8 py-16 text-center"><p className="text-sm font-bold text-[#013E3F]/40">No templates found</p></td></tr>
                     ) : filteredManagerTemplates.map(tmpl => {
                       const isDeleted = !!(tmpl as any).deleted_at;
                       return (
                         <tr key={tmpl.id} onClick={() => {
                           if (isDeleted) return;
                           setEditingTemplateId(tmpl.id);
-                          setManagerTaskData({ title: tmpl.title, description: tmpl.description || '', dueOffset: tmpl.due_date_offset, timeEstimate: tmpl.time_estimate || '' });
+                          setManagerTaskData({ title: tmpl.title, description: tmpl.description || '', dueOffset: tmpl.due_date_offset, timeEstimate: tmpl.time_estimate || '', link: tmpl.link || '' });
                           setManagerTaskError(null);
                           setManagerTaskSuccess(false);
                           setConfirmDeleteTemplateId(null);
@@ -2523,6 +2524,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                             {tmpl.due_date_offset < 0 ? `${Math.abs(tmpl.due_date_offset)} days before start` : tmpl.due_date_offset === 0 ? 'Start day' : `Day ${tmpl.due_date_offset}`}
                           </td>
                           <td className="px-8 py-5 text-xs text-[#013E3F]/60">{tmpl.time_estimate || '—'}</td>
+                          <td className="px-8 py-5 text-xs text-[#013E3F]/60">
+                            {tmpl.link ? (
+                              <a href={tmpl.link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-600 hover:underline truncate block max-w-[200px]">
+                                {tmpl.link.length > 30 ? tmpl.link.slice(0, 30) + '…' : tmpl.link}
+                              </a>
+                            ) : '—'}
+                          </td>
                           <td className="px-8 py-5 text-xs text-[#013E3F]/60">{formatDate((tmpl as any).created_at || '')}</td>
                         </tr>
                       );
@@ -2555,6 +2563,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                 description: managerTaskData.description || null,
                 due_date_offset: managerTaskData.dueOffset,
                 time_estimate: managerTaskData.timeEstimate || null,
+                link: managerTaskData.link || null,
               };
               const result = editingTemplateId
                 ? await updateTaskTemplate(editingTemplateId, payload)
@@ -2565,7 +2574,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                 setTimeout(() => {
                   setShowManagerTaskBuilder(false);
                   setManagerTaskSuccess(false);
-                  setManagerTaskData({ title: '', description: '', dueOffset: 0, timeEstimate: '' });
+                  setManagerTaskData({ title: '', description: '', dueOffset: 0, timeEstimate: '', link: '' });
                   getTaskTemplates(true).then(setManagerTemplates);
                 }, 800);
               } else {
@@ -2590,6 +2599,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                   <label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Time Estimate</label>
                   <input className="w-full bg-[#013E3F] border-b border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" placeholder="15 min" value={managerTaskData.timeEstimate} onChange={e => setManagerTaskData({...managerTaskData, timeEstimate: e.target.value})} />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Link</label>
+                <input className="w-full bg-[#013E3F] border-b border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" placeholder="https://..." value={managerTaskData.link} onChange={e => setManagerTaskData({...managerTaskData, link: e.target.value})} />
               </div>
               <div className="pt-6 border-t border-[#F3EEE7]/10 flex items-center gap-3">
                 {editingTemplateId && (
