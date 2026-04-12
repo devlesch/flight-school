@@ -1285,9 +1285,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
             <div className="overflow-y-auto">
               <form onSubmit={handleAddTraining} className="p-10 space-y-12 text-[#F3EEE7]">
                 {/* Module / Call segmented control */}
-                <div className="flex bg-white/10 p-1 rounded-xl border border-white/10 w-fit">
-                  <button type="button" onClick={() => { setTaskCategory('module'); setTrainingData({...trainingData, method: 'MANAGER_LED'}); }} className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${taskCategory === 'module' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>Module</button>
-                  <button type="button" onClick={() => { setTaskCategory('call'); setTrainingData({...trainingData, method: 'LIVE_CALL'}); }} className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${taskCategory === 'call' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>Call</button>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex bg-white/10 p-1 rounded-xl border border-white/10 w-fit">
+                    <button type="button" onClick={() => { setTaskCategory('module'); setTrainingData({...trainingData, method: 'MANAGER_LED'}); }} className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${taskCategory === 'module' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>Module</button>
+                    <button type="button" onClick={() => { setTaskCategory('call'); setTrainingData({...trainingData, method: 'LIVE_CALL'}); }} className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${taskCategory === 'call' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>Call</button>
+                  </div>
+                  <div className="flex bg-white/10 p-1 rounded-xl border border-white/10 w-fit">
+                    <button type="button" onClick={() => setTrainingData({...trainingData, audience: 'all'})} className={`px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${trainingData.audience === 'all' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>All</button>
+                    <button type="button" onClick={() => setTrainingData({...trainingData, audience: 'cohort'})} className={`px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${trainingData.audience === 'cohort' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>Cohort</button>
+                    <button type="button" onClick={() => setTrainingData({...trainingData, audience: 'direct'})} className={`px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${trainingData.audience === 'direct' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>Direct</button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                   <div className="space-y-8">
@@ -1303,14 +1310,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                   <div className="space-y-8">
                     <h4 className="text-[11px] font-bold uppercase text-[#F3EEE7]/40 tracking-[3px] border-b border-[#F3EEE7]/10 pb-2">Targeting</h4>
                     <div className="space-y-2"><label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Target Role</label><select className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-3 text-sm" value={trainingData.targetRole} onChange={e => setTrainingData({...trainingData, targetRole: e.target.value})}><option>All Roles</option><option>MxA</option><option>MxM</option><option>AGM</option><option>GM</option><option>RD</option></select></div>
-                    <div className="space-y-2">
-                      <label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Audience</label>
-                      <div className="flex bg-[#012d2e] p-1 rounded-xl shadow-inner border border-[#F3EEE7]/10">
-                        <button type="button" onClick={() => setTrainingData({...trainingData, audience: 'all'})} className={`flex-1 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${trainingData.audience === 'all' ? 'bg-[#FDD344] text-[#013E3F] shadow-lg' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7]'}`}>All</button>
-                        <button type="button" onClick={() => setTrainingData({...trainingData, audience: 'cohort'})} className={`flex-1 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${trainingData.audience === 'cohort' ? 'bg-[#FDD344] text-[#013E3F] shadow-lg' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7]'}`}>Cohort</button>
-                        <button type="button" onClick={() => setTrainingData({...trainingData, audience: 'direct'})} className={`flex-1 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${trainingData.audience === 'direct' ? 'bg-[#FDD344] text-[#013E3F] shadow-lg' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7]'}`}>Direct</button>
-                      </div>
-                    </div>
                     {taskCategory === 'module' && <div className="p-6 bg-[#F3EEE7]/5 rounded-xl border border-[#F3EEE7]/10 space-y-6"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><BookOpen className="w-4 h-4" /><p className="text-xs font-bold uppercase">Workbook Prompt</p></div><button type="button" onClick={() => setTrainingData({...trainingData, hasWorkbook: !trainingData.hasWorkbook})} className={`w-12 h-6 rounded-full relative flex items-center transition-colors ${trainingData.hasWorkbook ? 'bg-green-600' : 'bg-[#F3EEE7]/20'}`}><div className={`w-5 h-5 bg-white rounded-full transition-transform ${trainingData.hasWorkbook ? 'translate-x-6' : 'translate-x-1'}`} /></button></div>{trainingData.hasWorkbook && <textarea className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 rounded-lg p-4 text-sm focus:border-[#FDD344] outline-none h-24" placeholder="Enter reflection question..." value={trainingData.workbookContent} onChange={e => setTrainingData({...trainingData, workbookContent: e.target.value})} />}</div>}
                   </div>
                 </div>
