@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { User, NewHireProfile, WorkbookPrompt, ManagerTask, TrainingModule } from '../types';
 import { formatDate } from '../lib/formatDate';
 import { Slack, Mail, CheckSquare, Clock, AlertTriangle, MessageSquarePlus, ChevronRight, X, AlertCircle, CheckCircle, BookOpen, MessageCircle, Megaphone, ListTodo, Calendar, Timer, Info, Target, ArrowRight, LayoutDashboard, Eye, PlusCircle, Send, Users, UserCheck, ChevronLeft, ClipboardList, Briefcase, UserPlus, Search, Filter, UserCog, RefreshCw, Loader2 } from 'lucide-react';
@@ -7,6 +7,7 @@ import { useToast } from './Toast';
 import confetti from 'canvas-confetti';
 import { useCohortTeam } from '../hooks/useCohortTeam';
 import { useManagerTasks } from '../hooks/useManagerTasks';
+import { getUserTasks, initializeTasksForNewHire, updateTaskCompletion, TaskWithTemplate } from '../services/managerTaskService';
 import { syncLessonlyStatus } from '../services/lessonlySyncService';
 
 interface ManagerDashboardProps {
@@ -124,11 +125,48 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
 
   const [selectedHireForEmail, setSelectedHireForEmail] = useState<NewHireProfile | null>(null);
   const [viewingHire, setViewingHire] = useState<NewHireProfile | null>(null);
+  const [viewingHireTasks, setViewingHireTasks] = useState<TaskWithTemplate[]>([]);
+  const [viewingHireTasksLoading, setViewingHireTasksLoading] = useState(false);
   const [viewingHireTab, setViewingHireTab] = useState<'overview' | 'workbook' | 'tracker'>('overview');
 
   const [drafting, setDrafting] = useState(false);
   const [generatedMessage, setGeneratedMessage] = useState<string | null>(null);
   
+  // Fetch manager tasks when tracker tab opens for a student
+  useEffect(() => {
+    if (!viewingHire || viewingHireTab !== 'tracker') return;
+    let cancelled = false;
+    setViewingHireTasksLoading(true);
+    (async () => {
+      let tasks = await getUserTasks(user.id, viewingHire.id);
+      if (tasks.length === 0) {
+        tasks = await initializeTasksForNewHire(user.id, viewingHire.id, viewingHire.startDate);
+      }
+      if (!cancelled) {
+        setViewingHireTasks(tasks);
+        setViewingHireTasksLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [viewingHire?.id, viewingHireTab, user.id]);
+
+  const handleToggleManagerTask = async (taskId: string) => {
+    const task = viewingHireTasks.find(t => t.id === taskId);
+    if (!task) return;
+    const newCompleted = !task.completed;
+    // Optimistic update
+    setViewingHireTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: newCompleted, completed_at: newCompleted ? new Date().toISOString() : null } : t));
+    // Persist
+    await updateTaskCompletion(taskId, newCompleted);
+    if (newCompleted) {
+      confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 }, colors: ['#FDD344', '#013E3F'] });
+    }
+  };
+
+  const trackerProgress = viewingHireTasks.length > 0
+    ? Math.round((viewingHireTasks.filter(t => t.completed).length / viewingHireTasks.length) * 100)
+    : 0;
+
   // Reassignment State
   const [reassigningTask, setReassigningTask] = useState<{ hireId: string; moduleId: string; title: string } | null>(null);
   
@@ -1062,53 +1100,53 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                        <h4 className="font-bold text-lg mb-2 font-serif">Onboarding Path Completion Tracker</h4>
                        <p className="text-[#013E3F]/70 mb-4">Complete these tasks to ensure your new hire has a smooth start. These are monitored by Ops Admins.</p>
                        <div className="w-full bg-[#013E3F]/10 rounded-full h-2 mb-2">
-                          <div 
-                             className="bg-[#013E3F] h-2 rounded-full transition-all duration-500" 
-                             style={{ width: `${Math.round(((viewingHire.managerTasks?.filter(t => hireTasks[t.id]).length || 0) / (viewingHire.managerTasks?.length || 1)) * 100)}%` }}
-                          ></div>
+                          <div className="bg-[#013E3F] h-2 rounded-full transition-all duration-500" style={{ width: `${trackerProgress}%` }} />
                        </div>
-                       <p className="text-xs font-bold text-[#013E3F]/40 uppercase tracking-widest text-right">
-                          {Math.round(((viewingHire.managerTasks?.filter(t => hireTasks[t.id]).length || 0) / (viewingHire.managerTasks?.length || 1)) * 100)}% Complete
-                       </p>
+                       <p className="text-xs font-bold text-[#013E3F]/40 uppercase tracking-widest text-right">{trackerProgress}% Complete</p>
                     </div>
 
+                    {viewingHireTasksLoading ? (
+                      <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#013E3F]/30" /></div>
+                    ) : viewingHireTasks.length === 0 ? (
+                      <p className="text-center text-[#013E3F]/40 text-sm py-8">No manager tasks configured. Create templates in Tasks - Manager.</p>
+                    ) : (
                     <div className="space-y-3">
-                       {viewingHire.managerTasks?.map((task) => {
-                         const isCompleted = hireTasks[task.id];
-                         const isPreBoarding = task.dueDateOffset < 0;
-                         const overdue = isTaskOverdue(viewingHire, task);
+                       {viewingHireTasks.map((task) => {
+                         const tmpl = task.template;
+                         const isCompleted = task.completed;
+                         const offset = tmpl?.due_date_offset ?? 0;
+                         const isPreBoarding = offset < 0;
+                         const dueDate = task.due_date ? new Date(task.due_date + 'T00:00:00') : null;
+                         const isOverdue = !isCompleted && dueDate && dueDate < new Date();
                          return (
-                           <div 
-                              key={task.id} 
-                              onClick={() => toggleManagerTask(viewingHire, task.id)}
-                              className={`p-4 rounded-lg border cursor-pointer transition-all group flex items-start gap-4 ${isCompleted ? 'bg-green-50 border-green-200' : overdue ? 'bg-red-50 border-red-300 ring-2 ring-red-500/20' : 'bg-white border-[#013E3F]/10 hover:border-[#013E3F]/30 shadow-sm'}`}
+                           <div
+                              key={task.id}
+                              onClick={() => handleToggleManagerTask(task.id)}
+                              className={`p-4 rounded-lg border cursor-pointer transition-all group flex items-start gap-4 ${isCompleted ? 'bg-green-50 border-green-200' : isOverdue ? 'bg-red-50 border-red-300 ring-2 ring-red-500/20' : 'bg-white border-[#013E3F]/10 hover:border-[#013E3F]/30 shadow-sm'}`}
                            >
-                              <div className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition-colors ${isCompleted ? 'bg-green-600 border-green-600 text-white' : overdue ? 'bg-red-600 border-red-600 text-white' : 'bg-white border-[#013E3F]/20 text-transparent'}`}>
-                                 {overdue && !isCompleted ? <AlertCircle className="w-3.5 h-3.5" /> : <CheckSquare className="w-3.5 h-3.5" />}
+                              <div className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition-colors ${isCompleted ? 'bg-green-600 border-green-600 text-white' : isOverdue ? 'bg-red-600 border-red-600 text-white' : 'bg-white border-[#013E3F]/20 text-transparent'}`}>
+                                 {isOverdue && !isCompleted ? <AlertCircle className="w-3.5 h-3.5" /> : <CheckSquare className="w-3.5 h-3.5" />}
                               </div>
                               <div className="flex-1">
                                  <div className="flex items-center gap-2 mb-1">
-                                    <h5 className={`font-bold text-sm ${isCompleted ? 'text-green-800 line-through decoration-green-800/30' : overdue ? 'text-red-700' : 'text-[#013E3F]'}`}>
-                                      {task.title}
+                                    <h5 className={`font-bold text-sm ${isCompleted ? 'text-green-800 line-through decoration-green-800/30' : isOverdue ? 'text-red-700' : 'text-[#013E3F]'}`}>
+                                      {tmpl?.title || task.template_id}
                                     </h5>
-                                    {isPreBoarding && !isCompleted && !overdue && <span className="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Pre-Boarding</span>}
-                                    {overdue && !isCompleted && <span className="text-[9px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold uppercase animate-pulse">Overdue Action Needed</span>}
+                                    {isPreBoarding && !isCompleted && !isOverdue && <span className="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Pre-Boarding</span>}
+                                    {isOverdue && !isCompleted && <span className="text-[9px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold uppercase animate-pulse">Overdue</span>}
                                  </div>
-                                 <p className={`text-xs ${isCompleted ? 'text-green-600' : overdue ? 'text-red-600/70' : 'text-[#013E3F]/60'}`}>{task.description}</p>
+                                 {tmpl?.description && <p className={`text-xs ${isCompleted ? 'text-green-600' : isOverdue ? 'text-red-600/70' : 'text-[#013E3F]/60'}`}>{tmpl.description}</p>}
                                  <div className="flex gap-3 mt-3">
-                                   <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#013E3F]/40">
-                                      <Timer className="w-3 h-3" /> {task.timeEstimate}
-                                   </span>
-                                   <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${task.dueDateOffset < 0 && !isCompleted ? (overdue ? 'text-red-600' : 'text-amber-500') : 'text-[#013E3F]/40'}`}>
-                                      <Calendar className="w-3 h-3" /> 
-                                      {task.dueDateOffset < 0 ? `${Math.abs(task.dueDateOffset)} days before start` : `${task.dueDateOffset === 0 ? 'On' : `${task.dueDateOffset} days after`} start`}
-                                   </span>
+                                   {tmpl?.time_estimate && <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#013E3F]/40"><Timer className="w-3 h-3" /> {tmpl.time_estimate}</span>}
+                                   {dueDate && <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${isOverdue ? 'text-red-600' : 'text-[#013E3F]/40'}`}><Calendar className="w-3 h-3" /> Due {formatDate(task.due_date!)}</span>}
+                                   {!dueDate && <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#013E3F]/40"><Calendar className="w-3 h-3" /> {offset < 0 ? `${Math.abs(offset)} days before start` : offset === 0 ? 'Start day' : `Day ${offset}`}</span>}
                                  </div>
                               </div>
                            </div>
                          );
                        })}
                     </div>
+                    )}
                   </div>
                 )}
              </div>
