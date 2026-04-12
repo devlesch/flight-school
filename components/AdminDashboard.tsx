@@ -361,8 +361,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     if (!selectedSlotRole || !selectedSlotRegion) return [];
     return allUsers.filter(u => {
       if (u.standardized_role !== selectedSlotRole || u.region !== selectedSlotRegion) return false;
-      // Only New Hires belong in cohorts — exclude Managers and Admins
-      if (u.role !== 'New Hire') return false;
+      // Cohort membership based on standardized_role + region + start_date, not system role
       // Exclude profiles without a start_date — they can't be cohort members
       if (!u.start_date) return false;
       if (selectedCohortData) {

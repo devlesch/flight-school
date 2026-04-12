@@ -303,10 +303,10 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
       .filter((r: any) => r.cohorts && (r.cohorts as Cohort).id === cohort!.id)
       .map((r: any) => ({ role_label: r.role_label as string, region: r.region as string }));
 
+    // Cohort membership: standardized_role + region + start_date — not system role
     const { data: allCohortProfiles, error: membersError } = await supabase
       .from('profiles')
       .select('*')
-      .eq('role', 'New Hire')
       .gte('start_date', cohort.hire_start_date)
       .lte('start_date', cohort.hire_end_date)
       .not('start_date', 'is', null)
