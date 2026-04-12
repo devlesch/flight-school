@@ -746,7 +746,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
             {viewMode === 'agenda' && 'Agenda & Presenters'}
             {viewMode === 'communications' && 'Communications'}
             {viewMode === 'engagement' && 'Cohort Engagement'}
-            {viewMode === 'tasks' && 'Tasks'}
+            {viewMode === 'tasks' && 'Tasks - Student'}
             {viewMode === 'settings' && 'Settings'}
           </h2>
           <p className="text-[#F3EEE7]/70 mt-2 font-light text-lg">

@@ -53,7 +53,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentUser, currentView, adm
                    onClick={() => { onViewSwitch(UserRole.ADMIN); onAdminViewModeChange('tasks'); }}
                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded text-sm font-medium transition-all ${currentView === UserRole.ADMIN && adminViewMode === 'tasks' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/60 hover:text-[#F3EEE7] hover:bg-white/5'}`}
                  >
-                    <ListTodo className="w-5 h-5" /> Tasks
+                    <ListTodo className="w-5 h-5" /> Tasks - Student
                  </button>
 
                  <button
