@@ -102,8 +102,9 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
       if (userRole !== 'New Hire') {
         const assignedOnly = supabaseModules.filter(m => m.progress);
         return assignedOnly.map(m => {
-          const computedDueDate = m.day_offset != null && baseDate
-            ? new Date(new Date(baseDate + 'T00:00:00').getTime() + m.day_offset * 86400000).toISOString().split('T')[0]
+          const modBase = (m as any).audience === 'direct' ? myProfile.startDate : baseDate;
+          const computedDueDate = m.day_offset != null && modBase
+            ? new Date(new Date(modBase + 'T00:00:00').getTime() + m.day_offset * 86400000).toISOString().split('T')[0]
             : new Date().toISOString().split('T')[0];
           return {
             id: m.id, title: m.title, description: m.description || '', type: m.type as TrainingModule['type'],
@@ -123,15 +124,16 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
         if (targetRole && userStdRole && targetRole !== userStdRole) return false;
         // Filter by audience
         const audience = (m as any).audience as string | null;
-        if (!audience) return true; // null = all students
+        const effectiveAudience = audience || 'cohort'; // null treated as cohort
         if (audienceType === 'both') return true;
-        return audience === audienceType;
+        return effectiveAudience === audienceType;
       });
 
       return relevantModules.map(m => {
-        // Compute due date from cohort starting date + module day_offset (same as manager view)
-        const computedDueDate = m.day_offset != null && baseDate
-          ? new Date(new Date(baseDate + 'T00:00:00').getTime() + m.day_offset * 86400000).toISOString().split('T')[0]
+        // Direct tasks use student's start_date; cohort tasks use cohort starting_date
+        const modBase = (m as any).audience === 'direct' ? myProfile.startDate : baseDate;
+        const computedDueDate = m.day_offset != null && modBase
+          ? new Date(new Date(modBase + 'T00:00:00').getTime() + m.day_offset * 86400000).toISOString().split('T')[0]
           : new Date().toISOString().split('T')[0];
         return {
           id: m.id,

@@ -105,7 +105,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     });
   }, [allUsers, registryFilters]);
 
-  const [trainingData, setTrainingData] = useState({ title: '', description: '', method: 'MANAGER_LED' as TrainingModule['type'], targetRole: 'All Roles', audience: 'all' as 'all' | 'cohort' | 'direct', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
+  const [trainingData, setTrainingData] = useState({ title: '', description: '', method: 'MANAGER_LED' as TrainingModule['type'], targetRole: 'All Roles', audience: 'cohort' as 'cohort' | 'direct', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
   const [taskCategory, setTaskCategory] = useState<'module' | 'call'>('module');
   const [link, setLink] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -227,7 +227,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       if (taskFilters.type && mod.type !== taskFilters.type) return false;
       if (taskFilters.targetRole && (mod.target_role || '') !== taskFilters.targetRole) return false;
       if (taskFilters.audience) {
-        const modAudience = (mod as any).audience || 'all';
+        const modAudience = (mod as any).audience || 'cohort';
         if (taskFilters.audience !== modAudience) return false;
       }
       return true;
@@ -571,7 +571,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       description: mod.description || '',
       method: mod.type as TrainingModule['type'],
       targetRole: mod.target_role || 'All Roles',
-      audience: (mod.audience as 'cohort' | 'direct' | null) || 'all',
+      audience: (mod.audience === 'direct' ? 'direct' : 'cohort') as 'cohort' | 'direct',
       assignmentDay: mod.day_offset ?? 0,
       hasWorkbook: false,
       workbookContent: '',
@@ -593,7 +593,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
       type: (taskCategory === 'call' ? 'LIVE_CALL' : trainingData.method) as ModuleType,
       link: link || null,
       target_role: trainingData.targetRole === 'All Roles' ? null : trainingData.targetRole,
-      audience: trainingData.audience === 'all' ? null : trainingData.audience,
+      audience: trainingData.audience,
       day_offset: trainingData.assignmentDay,
     };
 
@@ -606,7 +606,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     if (result) {
       setTaskSuccess(true);
       setTimeout(() => {
-        setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', audience: 'all', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
+        setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', audience: 'cohort', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
         setTaskCategory('module');
         setLink('');
         setTaskSuccess(false);
@@ -1113,7 +1113,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                 <button
                   onClick={() => {
                     setEditingModuleId(null);
-                    setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', audience: 'all', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
+                    setTrainingData({ title: '', description: '', method: 'MANAGER_LED', targetRole: 'All Roles', audience: 'cohort', assignmentDay: 0, hasWorkbook: false, workbookContent: '' });
                     setTaskCategory('module');
                     setLink('');
                     setTaskError(null);
@@ -1200,7 +1200,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                           className="text-xs bg-white border border-[#013E3F]/15 rounded-md px-2 py-1.5 text-[#013E3F] focus:ring-1 focus:ring-[#013E3F] w-full font-normal normal-case tracking-normal outline-none"
                         >
                           <option value="">All</option>
-                          <option value="all">All Students</option>
                           <option value="cohort">Cohort</option>
                           <option value="direct">Direct Reports</option>
                         </select>
@@ -1248,10 +1247,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                         <td className="px-8 py-5 text-xs text-[#013E3F]/60">{mod.target_role || 'All Roles'}</td>
                         <td className="px-8 py-5 text-xs text-[#013E3F]/60">
                           <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                            (mod as any).audience === 'cohort' ? 'bg-blue-50 text-blue-600' :
-                            (mod as any).audience === 'direct' ? 'bg-amber-50 text-amber-600' :
-                            'bg-[#F3EEE7] text-[#013E3F]/50'
-                          }`}>{(mod as any).audience === 'cohort' ? 'Cohort' : (mod as any).audience === 'direct' ? 'Direct' : 'All'}</span>
+                            (mod as any).audience === 'direct' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'
+                          }`}>{(mod as any).audience === 'direct' ? 'Direct' : 'Cohort'}</span>
                         </td>
                         <td className="px-8 py-5 text-xs text-[#013E3F]/60">{mod.duration || '—'}</td>
                         <td className="px-8 py-5 text-xs text-[#013E3F]/60">{mod.host || '—'}</td>
@@ -1291,7 +1288,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                     <button type="button" onClick={() => { setTaskCategory('call'); setTrainingData({...trainingData, method: 'LIVE_CALL'}); }} className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${taskCategory === 'call' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>Call</button>
                   </div>
                   <div className="flex bg-white/10 p-1 rounded-xl border border-white/10 w-fit">
-                    <button type="button" onClick={() => setTrainingData({...trainingData, audience: 'all'})} className={`px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${trainingData.audience === 'all' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>All</button>
                     <button type="button" onClick={() => setTrainingData({...trainingData, audience: 'cohort'})} className={`px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${trainingData.audience === 'cohort' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>Cohort</button>
                     <button type="button" onClick={() => setTrainingData({...trainingData, audience: 'direct'})} className={`px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${trainingData.audience === 'direct' ? 'bg-[#FDD344] text-[#013E3F]' : 'text-white/60 hover:text-white'}`}>Direct</button>
                   </div>

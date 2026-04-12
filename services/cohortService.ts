@@ -395,12 +395,11 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     const progressMap = new Map(userModules.map(um => [um.module_id, um]));
     const memberSource = sourceMap.get(profile.id) || 'cohort';
 
-    // Filter modules by audience based on member's source
+    // Filter modules by audience based on member's source (null treated as cohort)
     const filteredModules = allModules.filter((mod: any) => {
-      const audience = mod.audience as string | null;
-      if (!audience) return true; // null = all students
-      if (memberSource === 'both') return true; // both sees everything
-      return audience === memberSource; // match source to audience
+      const audience = (mod.audience as string | null) || 'cohort';
+      if (memberSource === 'both') return true;
+      return audience === memberSource;
     });
 
     const completedCount = userModules.filter(um => um.completed && filteredModules.some((m: any) => m.id === um.module_id)).length;
@@ -408,7 +407,11 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
 
     const modules: UserModuleWithDetails[] = filteredModules.map((mod: any) => {
       const userMod = progressMap.get(mod.id);
-      const baseDate = startingDate || profile.start_date || new Date().toISOString().split('T')[0];
+      // Direct tasks use the student's personal start_date; cohort tasks use cohort starting_date
+      const modAudience = mod.audience as string | null;
+      const baseDate = modAudience === 'direct'
+        ? (profile.start_date || new Date().toISOString().split('T')[0])
+        : (startingDate || profile.start_date || new Date().toISOString().split('T')[0]);
       const dueDateObj = new Date(new Date(baseDate + 'T00:00:00').getTime() + (mod.day_offset ?? 0) * 86400000);
       const dueDate = isNaN(dueDateObj.getTime()) ? new Date().toISOString().split('T')[0] : dueDateObj.toISOString().split('T')[0];
 
