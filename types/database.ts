@@ -225,6 +225,7 @@ export interface Database {
           due_date_offset: number;
           time_estimate: string | null;
           sort_order: number;
+          deleted_at: string | null;
         };
         Insert: {
           id?: string;
@@ -233,6 +234,7 @@ export interface Database {
           due_date_offset: number;
           time_estimate?: string | null;
           sort_order?: number;
+          deleted_at?: string | null;
         };
         Update: {
           id?: string;
@@ -241,6 +243,7 @@ export interface Database {
           due_date_offset?: number;
           time_estimate?: string | null;
           sort_order?: number;
+          deleted_at?: string | null;
         };
       };
       user_manager_tasks: {

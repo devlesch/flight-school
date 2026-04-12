@@ -8,11 +8,17 @@ export interface TaskWithTemplate extends UserManagerTask {
 /**
  * Get all manager task templates
  */
-export async function getTaskTemplates(): Promise<ManagerTaskTemplate[]> {
-  const { data, error } = await supabase
+export async function getTaskTemplates(includeDeleted = false): Promise<ManagerTaskTemplate[]> {
+  let query = supabase
     .from('manager_task_templates')
     .select('*')
     .order('sort_order', { ascending: true });
+
+  if (!includeDeleted) {
+    query = query.is('deleted_at', null);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching task templates:', error.message);
@@ -20,6 +26,89 @@ export async function getTaskTemplates(): Promise<ManagerTaskTemplate[]> {
   }
 
   return data as ManagerTaskTemplate[];
+}
+
+/**
+ * Create a new manager task template
+ */
+export async function createTaskTemplate(data: {
+  title: string;
+  description?: string | null;
+  due_date_offset: number;
+  time_estimate?: string | null;
+}): Promise<ManagerTaskTemplate | null> {
+  // Auto-assign sort_order
+  const templates = await getTaskTemplates(true);
+  const maxSort = templates.reduce((max, t) => Math.max(max, t.sort_order || 0), 0);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: created, error } = await (supabase as any)
+    .from('manager_task_templates')
+    .insert({ ...data, sort_order: maxSort + 1 })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating task template:', error.message);
+    return null;
+  }
+  return created as ManagerTaskTemplate;
+}
+
+/**
+ * Update a manager task template
+ */
+export async function updateTaskTemplate(
+  id: string,
+  data: { title?: string; description?: string | null; due_date_offset?: number; time_estimate?: string | null }
+): Promise<ManagerTaskTemplate | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: updated, error } = await (supabase as any)
+    .from('manager_task_templates')
+    .update(data)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating task template:', error.message);
+    return null;
+  }
+  return updated as ManagerTaskTemplate;
+}
+
+/**
+ * Soft delete a manager task template
+ */
+export async function deleteTaskTemplate(id: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('manager_task_templates')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error deleting task template:', error.message);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Restore a soft-deleted manager task template
+ */
+export async function restoreTaskTemplate(id: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('manager_task_templates')
+    .update({ deleted_at: null })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error restoring task template:', error.message);
+    return false;
+  }
+  return true;
 }
 
 /**

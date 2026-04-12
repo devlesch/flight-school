@@ -8,8 +8,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, 
 import { Mail, Calendar, TrendingUp, CheckCircle, AlertCircle, FileText, Loader2, Wand2, UploadCloud, Video, ArrowRight, X, Users, Plus, Clock, MessageSquare, Zap, PieChart, Settings, Palette, UserCheck, Search, Send, ChevronLeft, ChevronRight, MessageCircle, Globe, AtSign, Filter, BarChart2, MousePointer2, Check, UserMinus, ArrowLeft, Slack, ClipboardCheck, Info, Target, LayoutDashboard, Star, ShieldCheck, UserCog, UserPlus, ZapOff, Activity, History, HelpCircle, FileUp, Building2, UserCircle, Save, Briefcase, RefreshCw, Edit3, BookOpen, Layers, UserPlus2, UserCheck2, HelpCircle as HelpIcon, Timer, ListTodo } from 'lucide-react';
 import { analyzeProgress, ExtractedHireData, generateManagerNotification, generateEmailDraft, generateManagerDraft } from '../services/geminiService';
 import { createModule, getModules, updateModule, deleteModule, restoreModule, getUserModulesBatch } from '../services/moduleService';
-import type { UserModule as DbUserModule } from '../types/database';
+import type { UserModule as DbUserModule, ManagerTaskTemplate } from '../types/database';
 import { createCohort, updateCohort, LEADER_ROLE_MAP, upsertCohortLeader } from '../services/cohortService';
+import { getTaskTemplates, createTaskTemplate, updateTaskTemplate, deleteTaskTemplate, restoreTaskTemplate } from '../services/managerTaskService';
 import { parseWorkdayExcel, importWorkdayData, ImportResult } from '../services/workdayImportService';
 import { updateProfile, deleteProfile } from '../services/profileService';
 import { sendSlackDM } from '../services/slackService';
@@ -22,7 +23,7 @@ import { syncLessonlyStatus } from '../services/lessonlySyncService';
 import { getMessagesForUser, getMessagesSentBy, getMessageCounts, MessageRecord, GroupedMessages } from '../services/messageHistoryService';
 import { supabase } from '../lib/supabase';
 
-export type AdminViewMode = 'dashboard' | 'workflow' | 'tasks' | 'cohorts' | 'agenda' | 'communications' | 'engagement' | 'settings';
+export type AdminViewMode = 'dashboard' | 'workflow' | 'tasks' | 'manager-tasks' | 'cohorts' | 'agenda' | 'communications' | 'engagement' | 'settings';
 
 interface AdminDashboardProps {
   user: User;
@@ -212,10 +213,39 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [showDeletedTasks, setShowDeletedTasks] = useState(false);
   const [confirmDeleteModuleId, setConfirmDeleteModuleId] = useState<string | null>(null);
 
+  // Manager Tasks state
+  const [managerTemplates, setManagerTemplates] = useState<ManagerTaskTemplate[]>([]);
+  const [managerTemplatesLoading, setManagerTemplatesLoading] = useState(false);
+  const [showManagerTaskBuilder, setShowManagerTaskBuilder] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [showDeletedManagerTasks, setShowDeletedManagerTasks] = useState(false);
+  const [confirmDeleteTemplateId, setConfirmDeleteTemplateId] = useState<string | null>(null);
+  const [managerTaskData, setManagerTaskData] = useState({ title: '', description: '', dueOffset: 0, timeEstimate: '' });
+  const [managerTaskSearch, setManagerTaskSearch] = useState('');
+  const [managerTaskSubmitting, setManagerTaskSubmitting] = useState(false);
+  const [managerTaskSuccess, setManagerTaskSuccess] = useState(false);
+  const [managerTaskError, setManagerTaskError] = useState<string | null>(null);
+
   useEffect(() => {
     setModulesLoading(true);
     getModules(true).then(data => { setAllModules(data); setModulesLoading(false); });
   }, []);
+
+  // Fetch manager task templates
+  useEffect(() => {
+    if (viewMode === 'manager-tasks') {
+      setManagerTemplatesLoading(true);
+      getTaskTemplates(true).then(data => { setManagerTemplates(data); setManagerTemplatesLoading(false); });
+    }
+  }, [viewMode]);
+
+  const filteredManagerTemplates = useMemo(() => {
+    return managerTemplates.filter(t => {
+      if (!showDeletedManagerTasks && (t as any).deleted_at) return false;
+      if (managerTaskSearch && !t.title.toLowerCase().includes(managerTaskSearch.toLowerCase())) return false;
+      return true;
+    });
+  }, [managerTemplates, showDeletedManagerTasks, managerTaskSearch]);
 
   // Active modules (excludes deleted) — used for calendar, stats, drilldown
   const activeModules = useMemo(() => allModules.filter(m => !(m as any).deleted_at), [allModules]);
@@ -747,12 +777,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
             {viewMode === 'communications' && 'Communications'}
             {viewMode === 'engagement' && 'Cohort Engagement'}
             {viewMode === 'tasks' && 'Tasks - Student'}
+            {viewMode === 'manager-tasks' && 'Tasks - Manager'}
             {viewMode === 'settings' && 'Settings'}
           </h2>
           <p className="text-[#F3EEE7]/70 mt-2 font-light text-lg">
             {viewMode === 'dashboard' && 'High-level status of Industrious onboarding.'}
             {viewMode === 'workflow' && 'Import team members, manage active registry, and automate training.'}
             {viewMode === 'tasks' && 'Manage training modules and assignments.'}
+            {viewMode === 'manager-tasks' && 'Manage onboarding tasks assigned to managers for their new hires.'}
             {viewMode === 'cohorts' && 'Regional performance and manager drill-downs.'}
           </p>
       </div>
@@ -2404,6 +2436,190 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                 )
               )}
             </div>
+          </div>
+        </div>,
+      document.body)}
+
+      {/* MANAGER TASKS VIEW */}
+      {viewMode === 'manager-tasks' && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          <div className="bg-white rounded-2xl shadow-xl border border-[#013E3F]/10 overflow-hidden">
+            <div className="p-8 bg-[#F3EEE7] border-b border-[#013E3F]/10 flex items-center justify-between">
+              <div>
+                <h3 className="text-3xl font-serif text-[#013E3F]">Manager Task Templates</h3>
+                <p className="text-sm italic text-[#013E3F]/60 mt-4 leading-relaxed">
+                  <strong>All Templates:</strong> Onboarding tasks that managers must complete for each new hire.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowDeletedManagerTasks(!showDeletedManagerTasks)}
+                  className={`px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors ${showDeletedManagerTasks ? 'bg-red-100 text-red-600 border border-red-200' : 'text-[#013E3F]/40 hover:text-[#013E3F] border border-[#013E3F]/10'}`}
+                >
+                  {showDeletedManagerTasks ? 'Hide Deleted' : 'Show Deleted'}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingTemplateId(null);
+                    setManagerTaskData({ title: '', description: '', dueOffset: 0, timeEstimate: '' });
+                    setManagerTaskError(null);
+                    setManagerTaskSuccess(false);
+                    setConfirmDeleteTemplateId(null);
+                    setShowManagerTaskBuilder(true);
+                  }}
+                  className="flex items-center gap-2 bg-[#013E3F] text-[#FDD344] px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#013E3F]/80 transition-colors shadow-md"
+                >
+                  <Plus className="w-4 h-4" /> New Task
+                </button>
+              </div>
+            </div>
+            {managerTemplatesLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 text-[#013E3F]/40">
+                <Loader2 className="w-8 h-8 animate-spin mb-2" /><p className="text-sm">Loading templates...</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-[#F9F7F5] text-[#013E3F]/60 text-xs uppercase tracking-wider font-bold border-b border-[#013E3F]/10">
+                    <tr>
+                      <th className="px-8 py-4">Title</th>
+                      <th className="px-8 py-4">Day Offset</th>
+                      <th className="px-8 py-4">Time Estimate</th>
+                      <th className="px-8 py-4">Created</th>
+                    </tr>
+                    <tr className="bg-white border-b border-[#013E3F]/10">
+                      <th className="px-8 py-2">
+                        <input type="text" placeholder="Search title…" value={managerTaskSearch} onChange={e => setManagerTaskSearch(e.target.value)} className="text-xs bg-white border border-[#013E3F]/15 rounded-md px-2 py-1.5 text-[#013E3F] focus:ring-1 focus:ring-[#013E3F] w-full font-normal normal-case tracking-normal outline-none" />
+                      </th>
+                      <th className="px-8 py-2"></th>
+                      <th className="px-8 py-2"></th>
+                      <th className="px-8 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F3EEE7]">
+                    {filteredManagerTemplates.length === 0 ? (
+                      <tr><td colSpan={4} className="px-8 py-16 text-center"><p className="text-sm font-bold text-[#013E3F]/40">No templates found</p></td></tr>
+                    ) : filteredManagerTemplates.map(tmpl => {
+                      const isDeleted = !!(tmpl as any).deleted_at;
+                      return (
+                        <tr key={tmpl.id} onClick={() => {
+                          if (isDeleted) return;
+                          setEditingTemplateId(tmpl.id);
+                          setManagerTaskData({ title: tmpl.title, description: tmpl.description || '', dueOffset: tmpl.due_date_offset, timeEstimate: tmpl.time_estimate || '' });
+                          setManagerTaskError(null);
+                          setManagerTaskSuccess(false);
+                          setConfirmDeleteTemplateId(null);
+                          setShowManagerTaskBuilder(true);
+                        }} className={`transition-colors ${isDeleted ? 'opacity-50 bg-red-50/30' : 'hover:bg-[#F9F7F5] cursor-pointer'}`}>
+                          <td className="px-8 py-5">
+                            <div className="flex items-center gap-2">
+                              <p className={`font-serif font-bold text-[#013E3F] ${isDeleted ? 'line-through' : ''}`}>{tmpl.title}</p>
+                              {isDeleted && <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-red-100 text-red-600">Deleted</span>}
+                              {isDeleted && <button onClick={(e) => { e.stopPropagation(); restoreTaskTemplate(tmpl.id).then(ok => ok && getTaskTemplates(true).then(setManagerTemplates)); }} className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors">Restore</button>}
+                            </div>
+                            {tmpl.description && <p className="text-[10px] text-[#013E3F]/40 mt-0.5">{tmpl.description}</p>}
+                          </td>
+                          <td className="px-8 py-5 text-xs text-[#013E3F]/60">
+                            {tmpl.due_date_offset < 0 ? `${Math.abs(tmpl.due_date_offset)} days before start` : tmpl.due_date_offset === 0 ? 'Start day' : `Day ${tmpl.due_date_offset}`}
+                          </td>
+                          <td className="px-8 py-5 text-xs text-[#013E3F]/60">{tmpl.time_estimate || '—'}</td>
+                          <td className="px-8 py-5 text-xs text-[#013E3F]/60">{formatDate((tmpl as any).created_at || '')}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Manager Task Builder Modal */}
+      {showManagerTaskBuilder && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#013E3F] rounded-2xl shadow-2xl max-w-xl w-full p-10 animate-in zoom-in-95 text-[#F3EEE7]">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h3 className="font-serif text-2xl">{editingTemplateId ? 'Edit Manager Task' : 'New Manager Task'}</h3>
+                <p className="text-[#FDD344] text-xs font-bold uppercase tracking-widest mt-1">{editingTemplateId ? 'Edit existing template' : 'Create new template'}</p>
+              </div>
+              <button onClick={() => setShowManagerTaskBuilder(false)}><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setManagerTaskSubmitting(true);
+              setManagerTaskError(null);
+              const payload = {
+                title: managerTaskData.title,
+                description: managerTaskData.description || null,
+                due_date_offset: managerTaskData.dueOffset,
+                time_estimate: managerTaskData.timeEstimate || null,
+              };
+              const result = editingTemplateId
+                ? await updateTaskTemplate(editingTemplateId, payload)
+                : await createTaskTemplate(payload);
+              setManagerTaskSubmitting(false);
+              if (result) {
+                setManagerTaskSuccess(true);
+                setTimeout(() => {
+                  setShowManagerTaskBuilder(false);
+                  setManagerTaskSuccess(false);
+                  setManagerTaskData({ title: '', description: '', dueOffset: 0, timeEstimate: '' });
+                  getTaskTemplates(true).then(setManagerTemplates);
+                }, 800);
+              } else {
+                setManagerTaskError('Failed to save. Please try again.');
+              }
+            }} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Task Title</label>
+                <input required className="w-full bg-[#013E3F] border-b border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" placeholder="Schedule 1:1 with new hire" value={managerTaskData.title} onChange={e => setManagerTaskData({...managerTaskData, title: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Description</label>
+                <textarea className="w-full bg-[#013E3F] border border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2 px-3 rounded-lg text-sm h-20 resize-none" placeholder="Brief description..." value={managerTaskData.description} onChange={e => setManagerTaskData({...managerTaskData, description: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Day Offset</label>
+                  <input type="number" className="w-full bg-[#013E3F] border-b border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" value={managerTaskData.dueOffset} onChange={e => setManagerTaskData({...managerTaskData, dueOffset: parseInt(e.target.value) || 0})} />
+                  <p className="text-[10px] text-[#F3EEE7]/30">Negative = before start date</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Time Estimate</label>
+                  <input className="w-full bg-[#013E3F] border-b border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" placeholder="15 min" value={managerTaskData.timeEstimate} onChange={e => setManagerTaskData({...managerTaskData, timeEstimate: e.target.value})} />
+                </div>
+              </div>
+              <div className="pt-6 border-t border-[#F3EEE7]/10 flex items-center gap-3">
+                {editingTemplateId && (
+                  <button type="button" onClick={() => setConfirmDeleteTemplateId(editingTemplateId)} className="px-6 py-3 rounded-xl font-bold uppercase text-xs border border-red-400/30 text-red-400 hover:bg-red-400/10 transition-colors">Delete</button>
+                )}
+                <div className="flex-1" />
+                <button type="submit" disabled={managerTaskSubmitting || managerTaskSuccess} className={`px-12 py-3 rounded-xl font-bold uppercase text-xs transition-colors ${managerTaskSuccess ? 'bg-green-600 text-white' : 'bg-[#FDD344] text-[#013E3F]'}`}>{managerTaskSuccess ? '✓ Saved' : managerTaskSubmitting ? 'Saving...' : (editingTemplateId ? 'Update Task' : 'Create Task')}</button>
+                {managerTaskError && <p className="text-red-400 text-xs">{managerTaskError}</p>}
+              </div>
+              {confirmDeleteTemplateId && (
+                <div className="mt-4 p-4 bg-red-50/10 border border-red-400/20 rounded-xl">
+                  <p className="text-sm text-red-300 mb-3">Are you sure you want to delete <strong>{managerTaskData.title}</strong>?</p>
+                  <div className="flex gap-2 justify-end">
+                    <button type="button" onClick={() => setConfirmDeleteTemplateId(null)} className="px-4 py-2 text-xs font-bold uppercase rounded-lg border border-[#F3EEE7]/20 text-[#F3EEE7] hover:bg-white/5">Cancel</button>
+                    <button type="button" onClick={async () => {
+                      const ok = await deleteTaskTemplate(confirmDeleteTemplateId);
+                      if (ok) {
+                        toast.success('Template deleted.');
+                        setConfirmDeleteTemplateId(null);
+                        setShowManagerTaskBuilder(false);
+                        setEditingTemplateId(null);
+                        getTaskTemplates(true).then(setManagerTemplates);
+                      } else {
+                        toast.error('Failed to delete.');
+                      }
+                    }} className="px-4 py-2 text-xs font-bold uppercase rounded-lg bg-red-600 text-white hover:bg-red-700">Delete</button>
+                  </div>
+                </div>
+              )}
+            </form>
           </div>
         </div>,
       document.body)}
