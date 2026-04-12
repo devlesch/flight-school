@@ -2446,9 +2446,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
           <div className="bg-white rounded-2xl shadow-xl border border-[#013E3F]/10 overflow-hidden">
             <div className="p-8 bg-[#F3EEE7] border-b border-[#013E3F]/10 flex items-center justify-between">
               <div>
-                <h3 className="text-3xl font-serif text-[#013E3F]">Manager Task Templates</h3>
+                <h3 className="text-3xl font-serif text-[#013E3F]">Task Registry</h3>
                 <p className="text-sm italic text-[#013E3F]/60 mt-4 leading-relaxed">
-                  <strong>All Templates:</strong> Onboarding tasks that managers must complete for each new hire.
+                  <strong>All Tasks:</strong> Onboarding tasks that managers must complete for each new hire.
                 </p>
               </div>
               <div className="flex items-center gap-3">
