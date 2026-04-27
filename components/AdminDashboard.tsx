@@ -490,8 +490,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
 
     // Validate file extension
     const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'xlsx' && ext !== 'xls') {
-      setImportError('Please upload an .xlsx or .xls file.');
+    if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') {
+      setImportError('Please upload a .csv, .xlsx, or .xls file.');
       return;
     }
 
@@ -844,7 +844,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                    <p className="text-[#013E3F]/60 max-w-sm mx-auto mb-8 leading-relaxed text-sm font-medium">
                      Upload your Workday New Hire Report (CSV or Excel) to automatically create member profiles and link them to managers. This triggers regional roadmap assignments and identity verification.
                    </p>
-                   {importSuccess ? <button onClick={() => { setImportSuccess(false); setImportResult(null); setImportError(null); }} className="text-[#013E3F] font-bold text-xs underline">Upload another report</button> : <div className="relative group"><input type="file" accept=".xlsx,.xls" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={handleFileUpload} disabled={isProcessingFile} /><button className="bg-[#013E3F] text-white px-12 py-4 rounded-xl font-bold uppercase text-xs flex items-center gap-3">Select Workday Report <FileText className="w-4 h-4" /></button></div>}
+                   {importSuccess ? <button onClick={() => { setImportSuccess(false); setImportResult(null); setImportError(null); }} className="text-[#013E3F] font-bold text-xs underline">Upload another report</button> : <div className="relative group"><input type="file" accept=".csv,.xlsx,.xls" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={handleFileUpload} disabled={isProcessingFile} /><button className="bg-[#013E3F] text-white px-12 py-4 rounded-xl font-bold uppercase text-xs flex items-center gap-3">Select Workday Report <FileText className="w-4 h-4" /></button></div>}
                    {importError && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs font-medium whitespace-pre-wrap max-h-48 overflow-y-auto">{importError}</div>}
                 </div>
                 <div className="bg-[#F3EEE7]/20 border border-[#F3EEE7]/10 p-8 rounded-2xl">
