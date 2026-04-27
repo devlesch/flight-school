@@ -46,7 +46,7 @@ Status markers:
 
 - [x] **1.11 Verify:** `npx vitest run tests/unit/userImportMappers.test.ts` → 61/61 tests pass. `npx tsc --noEmit -p .` → no TypeScript errors on new files. Project's `vitest.config.ts` excludes `services/**` from coverage instrumentation (pre-existing config); test density (61 cases over 11 functions, all branches exercised) confirms ≥80% coverage qualitatively.
 
-- [ ] **1.12 Commit:** `feat(import): add userImportMappers pure-function module`. Single commit covering the test file + implementation.
+- [x] **1.12 Commit:** `feat(import): add userImportMappers pure-function module` (413e9c0). Track planning artifacts committed in 55bb8be.
 
 - [ ] **Task: Conductor - User Manual Verification 'Phase 1: Pure Mapper Module' (Protocol in workflow.md)**
 

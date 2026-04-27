@@ -1,7 +1,20 @@
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../types/database';
+import {
+  parseRegionColumn,
+  inferRegionFromLocation,
+  inferRegionFromState,
+  inferStandardizedRole,
+  normalizeEmail,
+  findManagerByName,
+  shouldUpdateField,
+  type Region,
+  type StandardizedRole,
+} from './userImportMappers';
 
 export interface WorkdayRow {
+  // Source tracking — 1-based row in the source file (header counted, matches Excel/Sheets)
+  sourceRowIndex: number;
   workerName: string;
   firstName: string;
   lastName: string;
@@ -13,17 +26,38 @@ export interface WorkdayRow {
   managerEmail: string;
   businessTitle: string;
   location: string;
+  hubLocation: string;       // preferred over location for region inference
+  stateProvince: string;     // last-resort region inference
+  rawRegion: string;         // verbatim Region column value
   department: string;
   email: string;
+  // Derived (populated during parse via userImportMappers)
+  region: Region | null;
+  regionSource: 'column' | 'inferred' | null;
+  standardizedRole: StandardizedRole | null;
 }
 
 export interface ImportResult {
+  // Existing counts (kept for backwards compatibility with current UI)
   created: number;
   updated: number;
   skipped: number;
   errors: string[];
   managersCreated: number;
   details: string[];
+  // Region telemetry
+  regionPopulated: number;
+  regionFromColumn: number;
+  regionFromInference: number;
+  regionUnmapped: number;
+  // Standardized-role telemetry
+  standardizedRolePopulated: number;
+  standardizedRoleNotApplicable: number;
+  // Manager-linkage diagnostics
+  managersLinked: number;
+  unmappedManager: Array<{ sourceRow: number; managerName: string }>;
+  ambiguousManager: Array<{ sourceRow: number; managerName: string; matchCount: number }>;
+  selfReferenceManager: Array<{ sourceRow: number; email: string; via: 'email' | 'name' }>;
 }
 
 // Known Workday column header patterns mapped to WorkdayRow fields.
@@ -35,13 +69,19 @@ const COLUMN_PATTERNS: [keyof WorkdayRow, string[]][] = [
   ['managerLastName', ['manager last name', 'supervisor last name', "manager's last"]],
   ['managerEmail', ['manager email', 'supervisor email', "manager's email", "manager's work email"]],
   ['managerName', ['manager', 'supervisor', 'superior', 'reports to']],
-  ['firstName', ['first name', 'preferred name', 'given name']],
-  ['lastName', ['last name', 'family name', 'surname']],
-  ['workerName', ['worker', 'employee name', 'full name']],
+  ['firstName', ['legal name - first name', 'preferred name - first name', 'first name', 'given name']],
+  ['lastName', ['legal name - last name', 'last name', 'family name', 'surname']],
+  ['workerName', ['full name', 'worker', 'employee name']],
   ['hireDate', ['hire date', 'start date', 'date of hire', 'original hire']],
   ['terminationDate', ['termination', 'end date', 'term date']],
-  ['businessTitle', ['business title', 'job title', 'job profile', 'position title']],
-  ['location', ['location', 'work location', 'office', 'site']],
+  // 'title' (bare) is intentionally last in this field's pattern list so
+  // 'business title' / 'job title' / 'position title' match first when present.
+  ['businessTitle', ['business title', 'job title', 'job profile', 'position title', 'title']],
+  // HUB Location detected before Location so 'hub location' wins over the bare 'location' substring match.
+  ['hubLocation', ['hub location', 'hub']],
+  ['location', ['work location', 'office', 'site', 'location']],
+  ['stateProvince', ['state/province', 'state', 'province']],
+  ['rawRegion', ['region']],
   ['department', ['department', 'cost center', 'org unit', 'supervisory']],
   ['email', ['email - primary work', 'primary work email', 'work email', 'email address', 'worker email', 'primary email', 'email']],
 ];
@@ -176,7 +216,8 @@ export async function parseWorkdayExcel(file: File): Promise<WorkdayRow[]> {
 
   const rows: WorkdayRow[] = [];
 
-  for (const row of dataRows) {
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i];
     if (!row || !Array.isArray(row)) continue;
     // Skip empty rows
     const nonEmpty = row.filter(c => c !== '' && c != null);
@@ -189,6 +230,9 @@ export async function parseWorkdayExcel(file: File): Promise<WorkdayRow[]> {
     const firstName = getCell(row, 'firstName');
     const lastName = getCell(row, 'lastName');
     const location = getCell(row, 'location');
+    const hubLocation = getCell(row, 'hubLocation');
+    const stateProvince = getCell(row, 'stateProvince');
+    const rawRegion = getCell(row, 'rawRegion');
     const managerName = getCell(row, 'managerName');
     const managerFirstName = getCell(row, 'managerFirstName');
     const managerLastName = getCell(row, 'managerLastName');
@@ -207,7 +251,26 @@ export async function parseWorkdayExcel(file: File): Promise<WorkdayRow[]> {
     // Filter: must have email; relax department/title requirements
     if (!email) continue;
 
+    // Region resolution cascade: column → location keyword → state lookup
+    let region: Region | null = parseRegionColumn(rawRegion);
+    let regionSource: 'column' | 'inferred' | null = region ? 'column' : null;
+    if (!region) {
+      region = inferRegionFromLocation(hubLocation || location);
+      if (region) regionSource = 'inferred';
+    }
+    if (!region) {
+      region = inferRegionFromState(stateProvince);
+      if (region) regionSource = 'inferred';
+    }
+
+    const standardizedRole = inferStandardizedRole(businessTitle);
+
+    // sourceRowIndex: 1-based, header row counted (matches Excel/Sheets row numbers)
+    // headerIndex is 0-based; header is at headerIndex+1 in 1-based terms; data row at i is at headerIndex+1+i+1.
+    const sourceRowIndex = headerIndex + 2 + i;
+
     rows.push({
+      sourceRowIndex,
       workerName: workerName || `${firstName} ${lastName}`.trim(),
       firstName,
       lastName,
@@ -219,8 +282,14 @@ export async function parseWorkdayExcel(file: File): Promise<WorkdayRow[]> {
       managerEmail,
       businessTitle,
       location,
+      hubLocation,
+      stateProvince,
+      rawRegion,
       department,
       email,
+      region,
+      regionSource,
+      standardizedRole,
     });
   }
 
@@ -241,9 +310,34 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
     errors: [],
     managersCreated: 0,
     details: [],
+    regionPopulated: 0,
+    regionFromColumn: 0,
+    regionFromInference: 0,
+    regionUnmapped: 0,
+    standardizedRolePopulated: 0,
+    standardizedRoleNotApplicable: 0,
+    managersLinked: 0,
+    unmappedManager: [],
+    ambiguousManager: [],
+    selfReferenceManager: [],
   };
 
-  // Pass 1: Fetch all existing profiles, build email -> profile map
+  // Accumulate region/role telemetry across all parsed rows.
+  for (const row of rows) {
+    if (row.region) {
+      result.regionPopulated++;
+      if (row.regionSource === 'column') result.regionFromColumn++;
+      else if (row.regionSource === 'inferred') result.regionFromInference++;
+    } else {
+      result.regionUnmapped++;
+    }
+    if (row.standardizedRole) result.standardizedRolePopulated++;
+    else result.standardizedRoleNotApplicable++;
+  }
+
+  // Pass 1a: Fetch all existing profiles, build email -> profile map.
+  // Note: full-table fetch is acceptable for current scale (hundreds-low-thousands of profiles).
+  // Per-batch keyed prefetch with chunking is a follow-up optimization.
   const { data: existingProfiles, error: fetchError } = await supabase
     .from('profiles')
     .select('*');
@@ -253,17 +347,41 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
     return result;
   }
 
+  const existingProfilesList = (existingProfiles || []) as Profile[];
+
   const profilesByEmail = new Map<string, Profile>();
-  for (const p of (existingProfiles || [])) {
-    profilesByEmail.set(p.email.toLowerCase(), p as Profile);
+  for (const p of existingProfilesList) {
+    profilesByEmail.set(p.email.toLowerCase(), p);
   }
 
-  // Pass 2: Process managers first
-  // Collect unique manager emails
+  // Pass 1b: Build directory used for name-based manager lookup.
+  // Reuses the existingProfiles fetch (no second query needed since we already have all profiles).
+  // Email is included so findManagerByName can detect and skip self-references.
+  const allProfilesByName: Array<{ id: string; name: string; email: string }> = existingProfilesList.map((p) => ({
+    id: p.id,
+    name: p.name || '',
+    email: p.email,
+  }));
+
+  // Pass 2: Process managers first (email path).
+  // Collect unique manager emails. Apply self-reference guard: a manager email
+  // matching a worker's own email is dropped from the manager set and recorded.
   const managerEntries = new Map<string, { name: string; firstName: string; lastName: string; email: string }>();
   for (const row of rows) {
-    if (row.managerEmail && !managerEntries.has(row.managerEmail.toLowerCase())) {
-      managerEntries.set(row.managerEmail.toLowerCase(), {
+    if (!row.managerEmail) continue;
+    const mgrEmailKey = normalizeEmail(row.managerEmail);
+    const workerEmailKey = normalizeEmail(row.email);
+    if (mgrEmailKey && mgrEmailKey === workerEmailKey) {
+      // Self-reference via email — record once per row, skip manager creation.
+      result.selfReferenceManager.push({
+        sourceRow: row.sourceRowIndex,
+        email: workerEmailKey,
+        via: 'email',
+      });
+      continue;
+    }
+    if (mgrEmailKey && !managerEntries.has(mgrEmailKey)) {
+      managerEntries.set(mgrEmailKey, {
         name: row.managerName || `${row.managerFirstName} ${row.managerLastName}`.trim(),
         firstName: row.managerFirstName,
         lastName: row.managerLastName,
@@ -331,22 +449,67 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
 
   // Pass 3: Process workers
   for (const row of rows) {
-    const emailKey = row.email.toLowerCase();
-    const managerProfile = row.managerEmail
-      ? profilesByEmail.get(row.managerEmail.toLowerCase())
-      : null;
-    const managerId = managerProfile?.id || null;
+    const emailKey = normalizeEmail(row.email);
+
+    // Resolve manager_id: prefer email-keyed lookup, fall back to name-based lookup.
+    let managerId: string | null = null;
+    const mgrEmailKey = normalizeEmail(row.managerEmail);
+    if (mgrEmailKey) {
+      // Email path. Self-reference would have been caught in Pass 2; defensive check here too.
+      if (mgrEmailKey !== emailKey) {
+        const managerProfile = profilesByEmail.get(mgrEmailKey);
+        if (managerProfile) {
+          managerId = managerProfile.id;
+        }
+      }
+    } else if (row.managerName) {
+      // Name path. Use full directory; pass worker email as selfEmail so a row that
+      // names itself as its own manager doesn't link.
+      const lookup = findManagerByName(row.managerName, allProfilesByName, row.email);
+      if (lookup.match) {
+        managerId = lookup.match.id;
+      } else if (lookup.ambiguous) {
+        result.ambiguousManager.push({
+          sourceRow: row.sourceRowIndex,
+          managerName: row.managerName,
+          matchCount: lookup.count,
+        });
+      } else {
+        // Detect name-path self-reference: a worker whose existing profile has the same name.
+        const own = profilesByEmail.get(emailKey);
+        if (own && own.name && own.name.trim().toLowerCase() === row.managerName.trim().toLowerCase()) {
+          result.selfReferenceManager.push({
+            sourceRow: row.sourceRowIndex,
+            email: emailKey,
+            via: 'name',
+          });
+        } else {
+          result.unmappedManager.push({
+            sourceRow: row.sourceRowIndex,
+            managerName: row.managerName,
+          });
+        }
+      }
+    }
+
+    if (managerId) result.managersLinked++;
 
     const existing = profilesByEmail.get(emailKey);
 
     if (existing) {
-      // Check if anything needs updating
+      // Build updates using shouldUpdateField gate to protect admin-curated values
+      // on non-provisioned profiles. Region and standardized_role are auto-derived
+      // and follow the same gate.
       const updates: Record<string, unknown> = {};
-      if (managerId && existing.manager_id !== managerId) updates.manager_id = managerId;
-      if (row.businessTitle && existing.title !== row.businessTitle) updates.title = row.businessTitle;
-      if (row.department && existing.department !== row.department) updates.department = row.department;
-      if (row.hireDate && existing.start_date !== row.hireDate) updates.start_date = row.hireDate;
-      if (row.location && existing.location !== row.location) updates.location = row.location;
+      if (managerId && shouldUpdateField(existing, 'manager_id', managerId)) updates.manager_id = managerId;
+      if (shouldUpdateField(existing, 'title', row.businessTitle)) updates.title = row.businessTitle;
+      if (shouldUpdateField(existing, 'department', row.department)) updates.department = row.department;
+      if (row.hireDate && shouldUpdateField(existing, 'start_date', row.hireDate)) updates.start_date = row.hireDate;
+      if (shouldUpdateField(existing, 'location', row.location)) updates.location = row.location;
+      if (row.region && shouldUpdateField(existing, 'region', row.region)) updates.region = row.region;
+      if (row.standardizedRole && shouldUpdateField(existing, 'standardized_role', row.standardizedRole)) {
+        updates.standardized_role = row.standardizedRole;
+      }
 
       if (Object.keys(updates).length > 0) {
         try {
@@ -359,7 +522,6 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
           if (updateError) {
             result.errors.push(`Failed to update ${row.email}: ${updateError.message}`);
           } else {
-            // Reflect updates in local map
             Object.assign(existing, updates);
             result.updated++;
             result.details.push(`Updated ${row.workerName} (${row.email})`);
@@ -371,7 +533,7 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
         result.skipped++;
       }
     } else {
-      // Create new worker profile
+      // Create new worker profile — always populate region + std_role when available.
       const workerName = row.workerName || `${row.firstName} ${row.lastName}`.trim();
       const newId = crypto.randomUUID();
       const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(row.firstName)}+${encodeURIComponent(row.lastName)}&background=013E3F&color=F3EEE7`;
@@ -386,11 +548,13 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
             name: workerName,
             role: 'New Hire',
             avatar,
-            title: row.businessTitle,
-            location: row.location,
+            title: row.businessTitle || null,
+            location: row.location || null,
             manager_id: managerId,
-            department: row.department,
+            department: row.department || null,
             start_date: row.hireDate,
+            region: row.region,
+            standardized_role: row.standardizedRole,
             provisioned: true,
           })
           .select()
@@ -400,6 +564,8 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
           result.errors.push(`Failed to create ${row.email}: ${insertError.message}`);
         } else {
           profilesByEmail.set(emailKey, inserted as Profile);
+          // Also add to the name directory so subsequent rows in this same import can resolve them by name.
+          allProfilesByName.push({ id: (inserted as Profile).id, name: workerName, email: row.email });
           result.created++;
           result.details.push(`Created worker profile: ${workerName} (${row.email})`);
         }
