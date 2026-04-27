@@ -363,6 +363,39 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
     email: p.email,
   }));
 
+  // Pass 1c: Look up auth.users.id for any incoming email so newly-created
+  // provisioned profiles use the existing auth identity from the start.
+  // This prevents the "delete + re-import = login broken" defect: when a
+  // user previously logged in and their profile was later deleted+reimported,
+  // their auth.users row persists (handle_new_user only fires on INSERT, mig 004),
+  // so without this step the new profile would get a fresh UUID that doesn't
+  // match auth.uid().
+  // Reconciliation for any pre-existing mismatches is handled by migration 023.
+  const authIdsByEmail = new Map<string, string>();
+  try {
+    const allEmails = rows.map((r) => normalizeEmail(r.email)).filter(Boolean);
+    if (allEmails.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: authIds, error: authIdsError } = await (supabase as any).rpc(
+        'get_auth_user_ids_by_email',
+        { emails: allEmails },
+      );
+      if (authIdsError) {
+        result.details.push(
+          `Note: get_auth_user_ids_by_email RPC unavailable (${authIdsError.message}). New profiles will use random UUIDs; users with prior auth.users rows may need manual reconciliation.`,
+        );
+      } else if (Array.isArray(authIds)) {
+        for (const r of authIds as Array<{ email: string; id: string }>) {
+          if (r?.email && r?.id) authIdsByEmail.set(r.email.toLowerCase(), r.id);
+        }
+      }
+    }
+  } catch (e) {
+    result.details.push(
+      `Note: auth-id lookup failed (${e instanceof Error ? e.message : String(e)}). Continuing with random UUIDs for new profiles.`,
+    );
+  }
+
   // Pass 2: Process managers first (email path).
   // Collect unique manager emails. Apply self-reference guard: a manager email
   // matching a worker's own email is dropped from the manager set and recorded.
@@ -414,9 +447,12 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
         }
       }
     } else {
-      // Create new manager profile
+      // Create new manager profile.
+      // Reuse the existing auth.users.id if one is already present for this
+      // email — otherwise authenticated logins will fail to load the profile
+      // (auth.uid() != profiles.id). Fallback to a fresh UUID if no auth row exists.
       const mgrName = mgr.name || `${mgr.firstName} ${mgr.lastName}`.trim();
-      const newId = crypto.randomUUID();
+      const newId = authIdsByEmail.get(emailKey) ?? crypto.randomUUID();
       const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(mgr.firstName)}+${encodeURIComponent(mgr.lastName)}&background=013E3F&color=F3EEE7`;
 
       try {
@@ -534,8 +570,11 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
       }
     } else {
       // Create new worker profile — always populate region + std_role when available.
+      // Reuse the existing auth.users.id if one is already present for this email
+      // (see Pass 1c). Otherwise generate a fresh UUID; the handle_new_user trigger
+      // will reconcile on first OAuth login.
       const workerName = row.workerName || `${row.firstName} ${row.lastName}`.trim();
-      const newId = crypto.randomUUID();
+      const newId = authIdsByEmail.get(emailKey) ?? crypto.randomUUID();
       const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(row.firstName)}+${encodeURIComponent(row.lastName)}&background=013E3F&color=F3EEE7`;
 
       try {
