@@ -44,6 +44,12 @@ GRANT EXECUTE ON FUNCTION public.get_auth_user_ids_by_email(TEXT[]) TO authentic
 -- 2. One-time reconciliation: align any existing profile.id with its
 --    auth.users.id when they're mismatched on the same email.
 -- ============================================
+-- The manager_id self-FK must be dropped during the cascade because
+-- updating other profiles' manager_id to r.auth_id would fail
+-- (r.auth_id isn't a valid profiles.id until we migrate the target
+-- profile's own id, which happens last in the loop). Re-added at the end.
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_manager_id_fkey;
+
 DO $$
 DECLARE
   r RECORD;
@@ -84,3 +90,8 @@ BEGIN
 
   RAISE NOTICE 'Total profiles reconciled: %', reconciled_count;
 END $$;
+
+-- Restore the manager_id self-FK with the same semantics as migration 018.
+ALTER TABLE public.profiles
+  ADD CONSTRAINT profiles_manager_id_fkey
+  FOREIGN KEY (manager_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
