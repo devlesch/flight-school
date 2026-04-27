@@ -39,6 +39,11 @@ Log Slack messages sent from Flight School to a DB table. Add slide-in side pane
 
 Add audience column to training_modules (cohort/direct/null). Task Builder gets audience dropdown. Module filtering respects student's source relationship to manager.
 
+### [~] Track: Bulk User Import — CSV Support, New Fields, and Hardening
+*Link: [./conductor/tracks/import-new-fields_20260426/](./conductor/tracks/import-new-fields_20260426/)*
+
+Comprehensive hardening of the Workday Import flow: CSV format support, region & standardized_role population (with Canada→East mapping), pre-flight validation (domain check, normalization, within-batch dedup), name-based manager linkage with self-reference detection, chunked parallel writes, expanded ImportResult diagnostics, downloadable diagnostics CSV. **Spec + plan complete (4 phases, ~50 tasks); ready for `/conductor-implement`.**
+
 ### [x] Track: New Hire Dashboard — Real Data Integration
 *Link: [./conductor/tracks/newhire-real-data_20260323/](./conductor/tracks/newhire-real-data_20260323/)*
 

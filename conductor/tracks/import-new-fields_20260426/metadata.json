@@ -1,0 +1,56 @@
+{
+  "track_id": "import-new-fields_20260426",
+  "type": "feature",
+  "status": "planned",
+  "priority": "high",
+  "depends_on": [],
+  "estimated_hours": null,
+  "created_at": "2026-04-26T00:00:00Z",
+  "updated_at": "2026-04-27T00:00:00Z",
+  "description": "Bulk User Import — CSV Support, New Fields, and Hardening",
+  "summary": "Comprehensive hardening of the Admin Dashboard's bulk user import: CSV support, region & standardized_role population, pre-flight validation (domain, dedup, normalization), name-based manager linkage with self-reference detection, chunked-parallel writes, expanded ImportResult diagnostics with downloadable CSV.",
+  "has_design": true,
+  "files_affected": [
+    "services/userImportMappers.ts (NEW)",
+    "services/workdayImportService.ts (MODIFY heavy)",
+    "components/AdminDashboard.tsx (MODIFY light)",
+    "tests/unit/userImportMappers.test.ts (NEW)",
+    "tests/unit/userImportService.test.ts (NEW)",
+    "tests/fixtures/sample-workday.csv (NEW)",
+    "tests/fixtures/sample-workday.xlsx (NEW)"
+  ],
+  "artifacts": {
+    "design": true,
+    "spec": true,
+    "plan": true,
+    "beads": false
+  },
+  "workflow": {
+    "state": "TRACKED",
+    "history": [
+      { "state": "INIT", "at": "2026-04-26T00:00:00Z", "command": "design" },
+      { "state": "DESIGNED", "at": "2026-04-27T00:00:00Z", "command": "design" },
+      { "state": "TRACKED", "at": "2026-04-27T00:00:00Z", "command": "newtrack" }
+    ],
+    "branch": "honey-sandpaper",
+    "archived": false,
+    "keep": false
+  },
+  "generation": {
+    "status": "plan_done",
+    "specCreatedAt": "2026-04-27T00:00:00Z",
+    "planCreatedAt": "2026-04-27T00:00:00Z",
+    "rbCompletedAt": null
+  },
+  "beads": {
+    "status": "skipped",
+    "epicId": null,
+    "epics": [],
+    "issues": [],
+    "planTasks": {},
+    "beadToTask": {},
+    "crossTrackDeps": [],
+    "reviewStatus": null,
+    "reviewedAt": null
+  }
+}
