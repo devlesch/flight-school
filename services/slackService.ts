@@ -58,3 +58,34 @@ export async function sendSlackDM(
 
   return { success: true, logged };
 }
+
+/**
+ * Build a Slack deep-link for a given email plus a `mailto:` fallback.
+ *
+ * Pure function — no Supabase, no async, no network.
+ *
+ * @param email - The recipient's email address.
+ * @returns An object with `primary` (Slack `app_redirect` URL) and `fallback`
+ *          (`mailto:` URL). If the email is empty, whitespace-only, or does
+ *          not match a basic email shape, both fields are empty strings.
+ */
+export function buildSlackDeepLink(email: string): { primary: string; fallback: string } {
+  if (typeof email !== 'string') {
+    return { primary: '', fallback: '' };
+  }
+
+  const trimmed = email.trim();
+  if (trimmed === '') {
+    return { primary: '', fallback: '' };
+  }
+
+  const emailShape = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailShape.test(trimmed)) {
+    return { primary: '', fallback: '' };
+  }
+
+  return {
+    primary: `https://industrious.slack.com/app_redirect?email=${encodeURIComponent(trimmed)}`,
+    fallback: `mailto:${trimmed}`,
+  };
+}
