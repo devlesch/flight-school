@@ -44,6 +44,34 @@ export async function getProfile(userId: string): Promise<Profile | null> {
 }
 
 /**
+ * Get a profile by exact name (case-insensitive).
+ *
+ * NOTE: the `profiles` table column is `name` (NOT `full_name`). We use
+ * Supabase's `ilike` operator for a case-insensitive exact match, mirroring
+ * the error-swallowing behavior of `getProfile` (log → return null).
+ *
+ * Empty/whitespace input short-circuits with `null` — no Supabase call.
+ */
+export async function getProfileByName(name: string): Promise<Profile | null> {
+  if (!name || !name.trim()) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .ilike('name', name)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching profile by name:', error.message);
+    return null;
+  }
+
+  return (data as Profile | null) ?? null;
+}
+
+/**
  * Update a profile
  */
 export async function updateProfile(
