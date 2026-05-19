@@ -14,6 +14,7 @@ import Sidebar from './components/Sidebar';
 import ImpersonationBanner from './components/ImpersonationBanner';
 import { isUserCohortLeader } from './services/cohortService';
 import { ToastProvider } from './components/Toast';
+import SupportFab from './components/SupportFab';
 import { Menu, Loader2 } from 'lucide-react';
 
 // Using a data URI for a reliable, offline-capable logo placeholder that resembles the brand
@@ -295,6 +296,7 @@ const App: React.FC = () => {
 
         {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />}
       </div>
+      <SupportFab currentProfile={profile} />
       </ToastProvider>
     </ErrorBoundary>
   );
