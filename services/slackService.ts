@@ -1,15 +1,30 @@
 import { supabase } from '../lib/supabase';
+import { formatSlackMessage } from './slackMessageFormatter';
+
+export interface SendSlackDMOptions {
+  title: string;
+  kind?: string;
+}
 
 /**
  * Send a Slack DM to a user via the slack-proxy edge function.
- * Logs the message to slack_messages table on success.
+ *
+ * When `opts.title` is provided, the body is wrapped with a Flight School
+ * branded header (emoji + bold title + attribution + divider) before being
+ * sent to Slack. The slack_messages row always stores the RAW caller-provided
+ * body so the history side-panel does not visually duplicate the header.
  */
 export async function sendSlackDM(
   email: string,
-  text: string
+  body: string,
+  opts?: SendSlackDMOptions
 ): Promise<{ success: boolean; error?: string; logged?: boolean }> {
+  const wireText = opts?.title
+    ? formatSlackMessage({ title: opts.title, body, kind: opts.kind })
+    : body;
+
   const { data, error } = await supabase.functions.invoke('slack-proxy', {
-    body: { action: 'send_dm', email, text },
+    body: { action: 'send_dm', email, text: wireText },
   });
 
   if (error) {
@@ -21,7 +36,7 @@ export async function sendSlackDM(
     return result;
   }
 
-  // Log the sent message to slack_messages table
+  // Log the sent message to slack_messages table — RAW body, not decorated.
   let logged = false;
   try {
     // Get current user as sender
@@ -41,7 +56,7 @@ export async function sendSlackDM(
           .insert({
             sender_id: user.id,
             recipient_id: (recipient as { id: string }).id,
-            message_text: text,
+            message_text: body,
             channel: 'slack',
           });
 
