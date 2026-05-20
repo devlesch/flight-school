@@ -74,33 +74,76 @@ export async function sendSlackDM(
   return { success: true, logged };
 }
 
+/** Base URL of the Industrious Slack workspace. */
+export const SLACK_WORKSPACE_URL = 'https://industriousoffice.slack.com';
+
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 /**
- * Build a Slack deep-link for a given email plus a `mailto:` fallback.
+ * Trim and validate an email against a basic email shape.
+ *
+ * @returns The trimmed email, or `null` if the input is not a string, is
+ *          empty/whitespace-only, or does not match a basic email shape.
+ */
+function normalizeEmail(email: unknown): string | null {
+  if (typeof email !== 'string') {
+    return null;
+  }
+  const trimmed = email.trim();
+  return trimmed !== '' && EMAIL_SHAPE.test(trimmed) ? trimmed : null;
+}
+
+/**
+ * Build a `mailto:` link for an email address.
  *
  * Pure function — no Supabase, no async, no network.
  *
- * @param email - The recipient's email address.
- * @returns An object with `primary` (Slack `app_redirect` URL) and `fallback`
- *          (`mailto:` URL). If the email is empty, whitespace-only, or does
- *          not match a basic email shape, both fields are empty strings.
+ * @returns A `mailto:` URL, or `''` if the email is empty/invalid.
  */
-export function buildSlackDeepLink(email: string): { primary: string; fallback: string } {
-  if (typeof email !== 'string') {
-    return { primary: '', fallback: '' };
+export function buildMailtoLink(email: string): string {
+  const valid = normalizeEmail(email);
+  return valid ? `mailto:${valid}` : '';
+}
+
+/**
+ * Resolve a deep link that opens a Slack DM with the person at `email`.
+ *
+ * Slack has no client-side URL that opens a DM straight from an email
+ * address — `app_redirect?email=` is for opening Slack *apps* and shows an
+ * "App Not Found" page. So this resolves the recipient's Slack user ID via
+ * the `slack-proxy` edge function (`users.lookupByEmail`) and builds an
+ * `app_redirect` DM link.
+ *
+ * If the lookup fails for any reason — no `SLACK_BOT_TOKEN` configured, the
+ * person isn't on Slack, a network error — it falls back to the workspace
+ * home URL, which still opens the correct Slack instance.
+ *
+ * @returns A Slack URL, or `''` only when `email` is empty/invalid.
+ */
+export async function resolveSlackDmUrl(email: string): Promise<string> {
+  const valid = normalizeEmail(email);
+  if (!valid) {
+    return '';
   }
 
-  const trimmed = email.trim();
-  if (trimmed === '') {
-    return { primary: '', fallback: '' };
-  }
+  const workspaceHome = `${SLACK_WORKSPACE_URL}/`;
+  try {
+    const { data, error } = await supabase.functions.invoke('slack-proxy', {
+      body: { action: 'lookup_user', email: valid },
+    });
 
-  const emailShape = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailShape.test(trimmed)) {
-    return { primary: '', fallback: '' };
-  }
+    if (error) {
+      return workspaceHome;
+    }
 
-  return {
-    primary: `https://industriousoffice.slack.com/app_redirect?email=${encodeURIComponent(trimmed)}`,
-    fallback: `mailto:${trimmed}`,
-  };
+    const result = data as { success: boolean; userId?: string; teamId?: string };
+    if (!result?.success || !result.userId) {
+      return workspaceHome;
+    }
+
+    const team = result.teamId ? `&team=${encodeURIComponent(result.teamId)}` : '';
+    return `${SLACK_WORKSPACE_URL}/app_redirect?channel=${encodeURIComponent(result.userId)}${team}`;
+  } catch {
+    return workspaceHome;
+  }
 }

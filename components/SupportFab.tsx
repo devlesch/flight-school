@@ -2,7 +2,11 @@ import React, { useState, useRef, useEffect, useId } from 'react';
 import { LifeBuoy, X } from 'lucide-react';
 import type { Profile } from '../types/database';
 import { useSupportContact } from '../hooks/useSupportContact';
-import { buildSlackDeepLink } from '../services/slackService';
+import {
+  resolveSlackDmUrl,
+  buildMailtoLink,
+  SLACK_WORKSPACE_URL,
+} from '../services/slackService';
 
 interface SupportFabProps {
   currentProfile: Profile;
@@ -32,7 +36,31 @@ const SupportFab: React.FC<SupportFabProps> = ({ currentProfile }) => {
   const headingId = useId();
 
   const { contact, source, loading } = useSupportContact(currentProfile);
-  const { primary, fallback } = buildSlackDeepLink(contact?.email ?? '');
+  const email = contact?.email ?? '';
+  const fallback = buildMailtoLink(email);
+
+  // Slack "Open in Slack" target. Slack can't open a DM straight from an
+  // email, so the recipient's user ID is resolved via the slack-proxy edge
+  // function. The link starts as the workspace home (always correct) and is
+  // upgraded to a DM deep link once the lookup resolves.
+  const [slackUrl, setSlackUrl] = useState('');
+
+  useEffect(() => {
+    if (!open || !email) {
+      setSlackUrl('');
+      return;
+    }
+    let cancelled = false;
+    setSlackUrl(`${SLACK_WORKSPACE_URL}/`);
+    resolveSlackDmUrl(email).then((url) => {
+      if (!cancelled && url) {
+        setSlackUrl(url);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, email]);
 
   // Escape key dismissal
   useEffect(() => {
@@ -146,9 +174,9 @@ const SupportFab: React.FC<SupportFabProps> = ({ currentProfile }) => {
           </div>
         </div>
         <div className="mt-4 space-y-2">
-          {primary && (
+          {slackUrl && (
             <a
-              href={primary}
+              href={slackUrl}
               target="_blank"
               rel="noreferrer"
               className="block w-full text-center bg-blue-500 text-white py-2 rounded hover:bg-blue-600"

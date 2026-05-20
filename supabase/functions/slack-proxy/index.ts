@@ -34,77 +34,107 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ success: false, error: `Auth failed: ${authError?.message || 'no user'}` });
     }
 
-    // 2. Verify admin role
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return jsonResponse({ success: false, error: `Profile lookup failed: ${profileError?.message || 'not found'}` });
-    }
-
-    if (profile.role !== 'Admin') {
-      return jsonResponse({ success: false, error: `Admin role required (current: ${profile.role})` });
-    }
-
-    // 3. Parse request body
+    // 2. Parse request body
     const { action, email, text } = await req.json();
 
-    if (action !== 'send_dm') {
-      return jsonResponse({ success: false, error: `Unknown action: ${action}` });
-    }
-
-    if (!email || !text) {
-      return jsonResponse({ success: false, error: 'email and text are required' });
-    }
-
-    // 4. Call VIBE MCP slack_send_dm
-    const mcpSecret = Deno.env.get('MCP_SECRET_KEY');
-    if (!mcpSecret) {
-      return jsonResponse({ success: false, error: 'MCP secret not configured' });
-    }
-
-    const mcpResponse = await fetch('https://industriousvibe.vercel.app/api/mcp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${mcpSecret}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/call',
-        params: {
-          name: 'slack_send_dm',
-          arguments: { user_email: email, text },
-        },
-      }),
-    });
-
-    if (!mcpResponse.ok) {
-      const body = await mcpResponse.text();
-      return jsonResponse({ success: false, error: `MCP HTTP ${mcpResponse.status}: ${body.slice(0, 200)}` });
-    }
-
-    const mcpResult = await mcpResponse.json();
-
-    // MCP JSON-RPC: check for error or tool-level error in result
-    if (mcpResult.error) {
-      return jsonResponse({ success: false, error: mcpResult.error.message || 'MCP error' });
-    }
-
-    // The tool result content may indicate failure (e.g. user not found on Slack)
-    const content = mcpResult.result?.content;
-    if (Array.isArray(content)) {
-      const textContent = content.find((c: { type: string }) => c.type === 'text');
-      if (textContent?.text?.toLowerCase().includes('error') || textContent?.text?.toLowerCase().includes('could not')) {
-        return jsonResponse({ success: false, error: textContent.text });
+    // 3a. lookup_user — resolve an email to a Slack user ID.
+    //     Available to any authenticated user (the Support FAB uses this so a
+    //     new hire can open a DM with their manager). Read-only, low-risk.
+    if (action === 'lookup_user') {
+      if (!email) {
+        return jsonResponse({ success: false, error: 'email is required' });
       }
+
+      const slackToken = Deno.env.get('SLACK_BOT_TOKEN');
+      if (!slackToken) {
+        return jsonResponse({ success: false, error: 'SLACK_BOT_TOKEN not configured' });
+      }
+
+      const slackRes = await fetch(
+        `https://slack.com/api/users.lookupByEmail?email=${encodeURIComponent(email)}`,
+        { headers: { Authorization: `Bearer ${slackToken}` } }
+      );
+      const slackData = await slackRes.json();
+
+      if (!slackData.ok) {
+        return jsonResponse({ success: false, error: `Slack lookup failed: ${slackData.error}` });
+      }
+
+      return jsonResponse({
+        success: true,
+        userId: slackData.user?.id,
+        teamId: slackData.user?.team_id,
+      });
     }
 
-    return jsonResponse({ success: true });
+    // 3b. send_dm — Admin-only. Sends a Slack DM via the VIBE MCP.
+    if (action === 'send_dm') {
+      // Verify admin role
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile) {
+        return jsonResponse({ success: false, error: `Profile lookup failed: ${profileError?.message || 'not found'}` });
+      }
+
+      if (profile.role !== 'Admin') {
+        return jsonResponse({ success: false, error: `Admin role required (current: ${profile.role})` });
+      }
+
+      if (!email || !text) {
+        return jsonResponse({ success: false, error: 'email and text are required' });
+      }
+
+      const mcpSecret = Deno.env.get('MCP_SECRET_KEY');
+      if (!mcpSecret) {
+        return jsonResponse({ success: false, error: 'MCP secret not configured' });
+      }
+
+      const mcpResponse = await fetch('https://industriousvibe.vercel.app/api/mcp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${mcpSecret}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: {
+            name: 'slack_send_dm',
+            arguments: { user_email: email, text },
+          },
+        }),
+      });
+
+      if (!mcpResponse.ok) {
+        const body = await mcpResponse.text();
+        return jsonResponse({ success: false, error: `MCP HTTP ${mcpResponse.status}: ${body.slice(0, 200)}` });
+      }
+
+      const mcpResult = await mcpResponse.json();
+
+      // MCP JSON-RPC: check for error or tool-level error in result
+      if (mcpResult.error) {
+        return jsonResponse({ success: false, error: mcpResult.error.message || 'MCP error' });
+      }
+
+      // The tool result content may indicate failure (e.g. user not found on Slack)
+      const content = mcpResult.result?.content;
+      if (Array.isArray(content)) {
+        const textContent = content.find((c: { type: string }) => c.type === 'text');
+        if (textContent?.text?.toLowerCase().includes('error') || textContent?.text?.toLowerCase().includes('could not')) {
+          return jsonResponse({ success: false, error: textContent.text });
+        }
+      }
+
+      return jsonResponse({ success: true });
+    }
+
+    return jsonResponse({ success: false, error: `Unknown action: ${action}` });
   } catch (err) {
     return jsonResponse({ success: false, error: `Unexpected: ${(err as Error).message}` });
   }

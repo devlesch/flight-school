@@ -1,15 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import type { Profile } from '../../../types/database';
 
 const mockUseSupportContact = vi.fn();
+const mockResolveSlackDmUrl = vi.fn();
 
 vi.mock('../../../hooks/useSupportContact', () => ({
   useSupportContact: (...args: unknown[]) => mockUseSupportContact(...args),
 }));
 
-// Real buildSlackDeepLink is fine (pure function); no mock for slackService.
+// `resolveSlackDmUrl` hits the slack-proxy edge function — mock it. The
+// `buildMailtoLink` stub mirrors the real (pure) validation behaviour.
+vi.mock('../../../services/slackService', () => ({
+  resolveSlackDmUrl: (...args: unknown[]) => mockResolveSlackDmUrl(...args),
+  buildMailtoLink: (email: string) =>
+    typeof email === 'string' &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+      ? `mailto:${email.trim()}`
+      : '',
+  SLACK_WORKSPACE_URL: 'https://industriousoffice.slack.com',
+}));
 
 const SupportFabModule = await import('../../../components/SupportFab');
 const SupportFab = SupportFabModule.default;
@@ -60,9 +71,13 @@ const fallbackProfile = makeProfile({
 describe('SupportFab', () => {
   beforeEach(() => {
     mockUseSupportContact.mockReset();
+    mockResolveSlackDmUrl.mockReset();
+    mockResolveSlackDmUrl.mockResolvedValue(
+      'https://industriousoffice.slack.com/app_redirect?channel=U_JANE&team=T1',
+    );
   });
 
-  it('(a) renders manager card with name, title, email, and Slack link href', () => {
+  it('(a) renders manager card with name, title, email, and Slack DM link', async () => {
     mockUseSupportContact.mockReturnValue({
       contact: managerProfile,
       source: 'manager',
@@ -79,16 +94,21 @@ describe('SupportFab', () => {
     expect(screen.getByText('jane.manager@industriousoffice.com')).toBeInTheDocument();
 
     const slackLink = screen.getByRole('link', { name: /open in slack/i });
-    expect(slackLink).toHaveAttribute(
-      'href',
-      'https://industriousoffice.slack.com/app_redirect?email=' +
-        encodeURIComponent('jane.manager@industriousoffice.com'),
+    // Starts at the workspace home, then upgrades to the resolved DM link.
+    await waitFor(() =>
+      expect(slackLink).toHaveAttribute(
+        'href',
+        'https://industriousoffice.slack.com/app_redirect?channel=U_JANE&team=T1',
+      ),
     );
     expect(slackLink).toHaveAttribute('target', '_blank');
     expect(slackLink).toHaveAttribute('rel', 'noreferrer');
+    expect(mockResolveSlackDmUrl).toHaveBeenCalledWith(
+      'jane.manager@industriousoffice.com',
+    );
   });
 
-  it('(b) renders fallback card with "Your fallback support contact" label', () => {
+  it('(b) renders fallback card with "Your fallback support contact" label', async () => {
     mockUseSupportContact.mockReturnValue({
       contact: fallbackProfile,
       source: 'fallback',
@@ -101,6 +121,16 @@ describe('SupportFab', () => {
 
     expect(screen.getByText(/your fallback support contact/i)).toBeInTheDocument();
     expect(screen.getByText('Melissa Zelko')).toBeInTheDocument();
+
+    // Let the async Slack-link resolution settle so it doesn't leak past the test.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('link', { name: /open in slack/i }),
+      ).toHaveAttribute(
+        'href',
+        'https://industriousoffice.slack.com/app_redirect?channel=U_JANE&team=T1',
+      ),
+    );
   });
 
   it('(c) renders "No support contact configured" empty state with NO Slack link', () => {
@@ -125,7 +155,10 @@ describe('SupportFab', () => {
     }
   });
 
-  it('(d) Slack link href exactly matches https://industriousoffice.slack.com/app_redirect?email=<encoded>', () => {
+  it('(d) Slack link href is the DM deep link resolved by resolveSlackDmUrl', async () => {
+    mockResolveSlackDmUrl.mockResolvedValue(
+      'https://industriousoffice.slack.com/app_redirect?channel=U_PLUS&team=T1',
+    );
     const m = { ...managerProfile, email: 'first+tag@industriousoffice.com' };
     mockUseSupportContact.mockReturnValue({
       contact: m,
@@ -138,12 +171,14 @@ describe('SupportFab', () => {
     fireEvent.click(screen.getByRole('button', { name: /open support/i }));
 
     const slackLink = screen.getByRole('link', { name: /open in slack/i });
-    const expected =
-      'https://industriousoffice.slack.com/app_redirect?email=' +
-      encodeURIComponent('first+tag@industriousoffice.com');
-    expect(slackLink.getAttribute('href')).toBe(expected);
-    // Sanity: encoded `+` to `%2B`.
-    expect(slackLink.getAttribute('href')).toContain('%2B');
+    await waitFor(() =>
+      expect(slackLink.getAttribute('href')).toBe(
+        'https://industriousoffice.slack.com/app_redirect?channel=U_PLUS&team=T1',
+      ),
+    );
+    expect(mockResolveSlackDmUrl).toHaveBeenCalledWith(
+      'first+tag@industriousoffice.com',
+    );
   });
 
   it('(e) popover opens on FAB click, closes on Escape, and closes on outside click', () => {
