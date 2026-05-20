@@ -1,0 +1,11 @@
+# Supabase
+.branches
+# Ignore the .temp cache, but keep project-ref so the project link
+# travels with the repo (every worktree / clone is auto-linked).
+.temp/*
+!.temp/project-ref
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local
