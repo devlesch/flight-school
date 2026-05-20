@@ -1025,7 +1025,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                         Open Lessonly
                     </a>
                     <a 
-                      href="https://industrious.slack.com/" 
+                      href="https://industriousoffice.slack.com/"
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="bg-[#013E3F] text-[#F3EEE7] px-5 py-3 rounded-lg flex items-center gap-2 shadow-lg shadow-[#013E3F]/10 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 font-bold uppercase tracking-wide text-xs"

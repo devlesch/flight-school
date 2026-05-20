@@ -81,7 +81,7 @@ describe('SupportFab', () => {
     const slackLink = screen.getByRole('link', { name: /open in slack/i });
     expect(slackLink).toHaveAttribute(
       'href',
-      'https://industrious.slack.com/app_redirect?email=' +
+      'https://industriousoffice.slack.com/app_redirect?email=' +
         encodeURIComponent('jane.manager@industriousoffice.com'),
     );
     expect(slackLink).toHaveAttribute('target', '_blank');
@@ -125,7 +125,7 @@ describe('SupportFab', () => {
     }
   });
 
-  it('(d) Slack link href exactly matches https://industrious.slack.com/app_redirect?email=<encoded>', () => {
+  it('(d) Slack link href exactly matches https://industriousoffice.slack.com/app_redirect?email=<encoded>', () => {
     const m = { ...managerProfile, email: 'first+tag@industriousoffice.com' };
     mockUseSupportContact.mockReturnValue({
       contact: m,
@@ -139,7 +139,7 @@ describe('SupportFab', () => {
 
     const slackLink = screen.getByRole('link', { name: /open in slack/i });
     const expected =
-      'https://industrious.slack.com/app_redirect?email=' +
+      'https://industriousoffice.slack.com/app_redirect?email=' +
       encodeURIComponent('first+tag@industriousoffice.com');
     expect(slackLink.getAttribute('href')).toBe(expected);
     // Sanity: encoded `+` to `%2B`.
