@@ -100,7 +100,7 @@ export function buildSlackDeepLink(email: string): { primary: string; fallback: 
   }
 
   return {
-    primary: `https://industrious.slack.com/app_redirect?email=${encodeURIComponent(trimmed)}`,
+    primary: `https://industriousoffice.slack.com/app_redirect?email=${encodeURIComponent(trimmed)}`,
     fallback: `mailto:${trimmed}`,
   };
 }

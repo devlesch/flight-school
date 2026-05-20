@@ -16,7 +16,7 @@ describe('buildSlackDeepLink', () => {
     const email = 'melissa.zelko+test@industriousoffice.com';
     const result = buildSlackDeepLink(email);
 
-    const expectedPrimary = `https://industrious.slack.com/app_redirect?email=${encodeURIComponent(
+    const expectedPrimary = `https://industriousoffice.slack.com/app_redirect?email=${encodeURIComponent(
       email
     )}`;
     expect(result.primary).toBe(expectedPrimary);
