@@ -58,9 +58,9 @@ describe('sendSlackDM', () => {
     await sendSlackDM('sam@example.com', 'Hi Sam', { title: 'Welcome aboard', kind: 'slack' });
     const sentText = invokeMock.mock.calls[0][1].body.text;
     expect(sentText).toContain('Welcome aboard');
-    expect(sentText).toContain('Flight School');
-    expect(sentText).toContain('———');
-    expect(sentText).toMatch(/^:rocket:/);
+    expect(sentText).toContain('FLIGHT SCHOOL');
+    expect(sentText).toContain('━');
+    expect(sentText).toMatch(/^:airplane:/);
     expect(sentText.endsWith('Hi Sam')).toBe(true);
   });
 
@@ -69,7 +69,7 @@ describe('sendSlackDM', () => {
     expect(insertMock).toHaveBeenCalledTimes(1);
     const inserted = insertMock.mock.calls[0][0];
     expect(inserted.message_text).toBe('Hi Sam');
-    expect(inserted.message_text).not.toContain('Flight School');
+    expect(inserted.message_text).not.toContain('FLIGHT SCHOOL');
   });
 
   it('returns logged=true on successful send + insert', async () => {

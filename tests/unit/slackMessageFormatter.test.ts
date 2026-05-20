@@ -1,20 +1,27 @@
 import { describe, it, expect } from 'vitest';
 import { formatSlackMessage } from '../../services/slackMessageFormatter';
 
+const BANNER = ':airplane: ✦ *FLIGHT SCHOOL* ✦ :airplane:';
+
 describe('formatSlackMessage — shape', () => {
-  it('starts with an emoji + bold title', () => {
+  it('starts with the Flight School banner', () => {
     const out = formatSlackMessage({ title: 'Welcome aboard', body: 'Hi Sam', kind: 'slack' });
-    expect(out).toMatch(/^:rocket: \*Welcome aboard\*/);
+    expect(out.startsWith(BANNER)).toBe(true);
   });
 
   it('includes the Flight School attribution', () => {
     const out = formatSlackMessage({ title: 'T', body: 'B', kind: 'slack' });
-    expect(out).toContain('Flight School');
+    expect(out).toContain('FLIGHT SCHOOL');
   });
 
   it('renders a visual divider line between header and body', () => {
     const out = formatSlackMessage({ title: 'T', body: 'B', kind: 'slack' });
-    expect(out).toContain('———');
+    expect(out).toContain('━');
+  });
+
+  it('renders a kind emoji + bold title line', () => {
+    const out = formatSlackMessage({ title: 'Welcome aboard', body: 'Hi Sam', kind: 'slack' });
+    expect(out).toContain(':rocket: *Welcome aboard*');
   });
 
   it('preserves the body verbatim at the tail', () => {
@@ -25,34 +32,39 @@ describe('formatSlackMessage — shape', () => {
 
   it('produces the full canonical layout', () => {
     const out = formatSlackMessage({ title: 'Welcome aboard', body: 'Hi Sam', kind: 'slack' });
-    expect(out).toBe(':rocket: *Welcome aboard*\n_Flight School_\n———\nHi Sam');
+    expect(out).toBe(
+      ':airplane: ✦ *FLIGHT SCHOOL* ✦ :airplane:\n' +
+        '━━━━━━━━━━━━━━━━━━━\n' +
+        ':rocket: *Welcome aboard*\n\n' +
+        'Hi Sam'
+    );
   });
 });
 
 describe('formatSlackMessage — kind → emoji mapping', () => {
   it('falls back to default emoji when kind is missing', () => {
     const out = formatSlackMessage({ title: 'X', body: 'Y' });
-    expect(out.startsWith(':rocket:')).toBe(true);
+    expect(out).toContain(':rocket: *X*');
   });
 
   it('falls back to default emoji when kind is unknown', () => {
     const out = formatSlackMessage({ title: 'X', body: 'Y', kind: 'no-such-kind' });
-    expect(out.startsWith(':rocket:')).toBe(true);
+    expect(out).toContain(':rocket: *X*');
   });
 
   it('maps "email" kind to envelope emoji', () => {
     const out = formatSlackMessage({ title: 'X', body: 'Y', kind: 'email' });
-    expect(out.startsWith(':envelope:')).toBe(true);
+    expect(out).toContain(':envelope: *X*');
   });
 
   it('maps "survey" kind to clipboard emoji', () => {
     const out = formatSlackMessage({ title: 'X', body: 'Y', kind: 'survey' });
-    expect(out.startsWith(':clipboard:')).toBe(true);
+    expect(out).toContain(':clipboard: *X*');
   });
 
   it('is case-insensitive for kind', () => {
     const out = formatSlackMessage({ title: 'X', body: 'Y', kind: 'EMAIL' });
-    expect(out.startsWith(':envelope:')).toBe(true);
+    expect(out).toContain(':envelope: *X*');
   });
 });
 

@@ -10,7 +10,7 @@ export interface SendSlackDMOptions {
  * Send a Slack DM to a user via the slack-proxy edge function.
  *
  * When `opts.title` is provided, the body is wrapped with a Flight School
- * branded header (emoji + bold title + attribution + divider) before being
+ * branded header (banner + runway divider + kind-emoji bold title) before being
  * sent to Slack. The slack_messages row always stores the RAW caller-provided
  * body so the history side-panel does not visually duplicate the header.
  */
