@@ -16,6 +16,18 @@ vi.mock('../../../services/teamService', () => ({
   getAllProfiles: vi.fn(),
 }));
 
+// Mock useSupportContact so the SupportFab does not perform Supabase reads
+// when mounted globally in <App>. The FAB still renders (the button is part of
+// the authenticated tree) but its popover content stays in the "none" branch.
+vi.mock('../../../hooks/useSupportContact', () => ({
+  useSupportContact: () => ({
+    contact: null,
+    source: 'none',
+    loading: false,
+    error: null,
+  }),
+}));
+
 // Mock dashboard components to avoid complex hook/data dependencies
 vi.mock('../../../components/AdminDashboard', () => ({
   default: ({ user }: any) => React.createElement('div', { 'data-testid': 'admin-dashboard' }, `Admin Dashboard - ${user.name}`),

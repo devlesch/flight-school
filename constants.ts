@@ -1,6 +1,13 @@
 import { UserRole, NewHireProfile, User, Objective, ManagerTask } from './types';
 import { MessageCircleHeart, Footprints, Wrench, HeartHandshake, Network } from 'lucide-react';
 
+/**
+ * Fallback support contact name used by `useSupportContact` when the signed-in
+ * user has no `manager_id` on file. Resolved via `getProfileByName` against
+ * `profiles`. Single source of truth — update here if People Ops contact changes.
+ */
+export const SUPPORT_FALLBACK_NAME = "Melissa Zelko";
+
 export const CURRENT_USER_ADMIN: User = {
   id: 'admin-1',
   name: 'Sarah Operations',
