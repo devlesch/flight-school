@@ -13,6 +13,9 @@ dist-ssr
 *.local
 coverage
 
+# adrien skill — worktree-local scratch (plans, loop state, evidence)
+.adrien/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
