@@ -27,7 +27,12 @@ export interface Database {
           id: string;
           email: string;
           name: string;
+          // `role` is repurposed — kept physically present but no longer a
+          // source of truth. `is_admin` is the only manually-stored status;
+          // manager status is derived (see migration 023).
           role: UserRole;
+          is_admin: boolean;
+          is_manager_override: boolean;
           avatar: string | null;
           title: string | null;
           region: string | null;
@@ -45,6 +50,8 @@ export interface Database {
           email: string;
           name: string;
           role?: UserRole;
+          is_admin?: boolean;
+          is_manager_override?: boolean;
           avatar?: string | null;
           title?: string | null;
           region?: string | null;
@@ -62,6 +69,8 @@ export interface Database {
           email?: string;
           name?: string;
           role?: UserRole;
+          is_admin?: boolean;
+          is_manager_override?: boolean;
           avatar?: string | null;
           title?: string | null;
           region?: string | null;
@@ -453,6 +462,21 @@ export interface Database {
       get_user_role: {
         Args: Record<PropertyKey, never>;
         Returns: string;
+      };
+      // Derived role for the calling user — 'Admin' | 'Manager' | 'NewHire'.
+      get_my_role: {
+        Args: Record<PropertyKey, never>;
+        Returns: string;
+      };
+      // Admin-only: derived role for an arbitrary user (impersonation routing).
+      role_of: {
+        Args: { uid: string };
+        Returns: string;
+      };
+      // Cycle-guarded transitive manager_id subtree below `root`.
+      descendant_ids: {
+        Args: { root: string };
+        Returns: string[];
       };
     };
     Enums: {

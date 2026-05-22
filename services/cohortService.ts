@@ -22,7 +22,12 @@ export interface CohortMember {
   profile: Profile;
   progress: number;
   modules: UserModuleWithDetails[];
-  source: 'cohort' | 'direct' | 'both';
+  // 'cohort'  — matched a cohort slot only
+  // 'direct'  — a depth-1 direct report only
+  // 'subtree' — pulled in by the transitive manager_id walk at depth ≥ 2
+  //             (a sub-manager / nested report)
+  // 'both'    — matched a cohort slot AND is somewhere in the subtree
+  source: 'cohort' | 'direct' | 'subtree' | 'both';
 }
 
 export interface ManagerCohortData {
@@ -233,10 +238,15 @@ export async function isUserCohortLeader(userId: string): Promise<boolean> {
  * Get a manager's cohort with enriched member data.
  * Resolves: manager → cohort_leaders → cohort (most recent) → profiles by date range → user_modules + training_modules
  */
-export async function getCohortMembersForManager(managerId: string): Promise<ManagerCohortData | null> {
+export async function getCohortMembersForManager(
+  managerId: string,
+  // Optional injectable Supabase client (backward-compatible — defaults to the
+  // module singleton). Used by tests to drive the query chain with fixtures.
+  client: typeof supabase = supabase,
+): Promise<ManagerCohortData | null> {
  try {
   // 1. Find cohorts this manager leads (by profile_id directly, or by email match for provisioned profiles)
-  const { data: leaderRows, error: leaderError } = await supabase
+  const { data: leaderRows, error: leaderError } = await client
     .from('cohort_leaders')
     .select('*, cohorts(*)')
     .eq('profile_id', managerId);
@@ -245,7 +255,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
   let resolvedLeaderRows = leaderRows;
   if ((!leaderRows || leaderRows.length === 0) && !leaderError) {
     // Get this manager's email
-    const { data: managerProfile } = await supabase
+    const { data: managerProfile } = await client
       .from('profiles')
       .select('email')
       .eq('id', managerId)
@@ -253,7 +263,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
 
     if (managerProfile?.email) {
       // Find cohort_leaders whose linked profile has the same email
-      const { data: emailMatch, error: emailError } = await supabase
+      const { data: emailMatch, error: emailError } = await client
         .from('cohort_leaders')
         .select('*, cohorts(*), profiles!inner(email)')
         .eq('profiles.email', managerProfile.email);
@@ -282,7 +292,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     cohort = (withCohort[0] as any).cohorts as Cohort;
 
     // 3. Get all leaders for this cohort (with profiles)
-    const { data: allLeaders, error: leadersError } = await supabase
+    const { data: allLeaders, error: leadersError } = await client
       .from('cohort_leaders')
       .select('*, profiles(*)')
       .eq('cohort_id', cohort.id);
@@ -304,7 +314,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
       .map((r: any) => ({ role_label: r.role_label as string, region: r.region as string }));
 
     // Cohort membership: standardized_role + region + start_date — not system role
-    const { data: allCohortProfiles, error: membersError } = await supabase
+    const { data: allCohortProfiles, error: membersError } = await client
       .from('profiles')
       .select('*')
       .gte('start_date', cohort.hire_start_date)
@@ -321,30 +331,51 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     );
   }
 
-  // Always fetch direct reports (manager_id = this manager)
-  const { data: directReports, error: directError } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('manager_id', managerId)
-    .eq('role', 'New Hire')
-    .order('name', { ascending: true });
+  // Fetch the manager's full transitive manager_id subtree (direct reports,
+  // their reports, and so on) via the cycle-guarded `descendant_ids` RPC
+  // (migration 023). The recursive walk lives server-side because one-level
+  // RLS cannot traverse the chain client-side.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: descendantRows, error: descendantError } = await (client as any)
+    .rpc('descendant_ids', { root: managerId });
 
-  console.log('[CohortService] managerId:', managerId, 'directReports:', directReports?.length, 'error:', directError?.message, 'cohortSlotMembers:', cohortSlotMembers.length);
+  const descendantIds = ((descendantRows || []) as unknown[])
+    .map((r: any) => (typeof r === 'string' ? r : r?.descendant_ids ?? r?.id))
+    .filter((id: unknown): id is string => typeof id === 'string');
 
-  // Merge cohort slot members + direct reports, deduplicate by ID, tag source
+  let subtreeMembers: Profile[] = [];
+  if (descendantIds.length > 0) {
+    const { data: subtreeProfiles, error: subtreeError } = await client
+      .from('profiles')
+      .select('*')
+      .in('id', descendantIds);
+    if (subtreeError) {
+      console.error('Error fetching subtree profiles:', subtreeError.message);
+    }
+    subtreeMembers = ((subtreeProfiles || []) as Profile[])
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }
+
+  console.log('[CohortService] managerId:', managerId, 'subtreeMembers:', subtreeMembers.length, 'error:', descendantError?.message, 'cohortSlotMembers:', cohortSlotMembers.length);
+
+  // Merge cohort slot members + subtree members, deduplicate by ID, tag source
   const cohortIds = new Set(cohortSlotMembers.map(p => p.id));
-  const directIds = new Set((directReports || []).map((p: any) => p.id));
-  const sourceMap = new Map<string, 'cohort' | 'direct' | 'both'>();
+  const subtreeIds = new Set(subtreeMembers.map(p => p.id));
+  const sourceMap = new Map<string, 'cohort' | 'direct' | 'subtree' | 'both'>();
 
   const seen = new Set<string>();
   const mergedProfiles: Profile[] = [];
-  for (const p of [...cohortSlotMembers, ...(directReports || [])] as Profile[]) {
+  for (const p of [...cohortSlotMembers, ...subtreeMembers] as Profile[]) {
     if (!seen.has(p.id)) {
       seen.add(p.id);
       mergedProfiles.push(p);
       const inCohort = cohortIds.has(p.id);
-      const inDirect = directIds.has(p.id);
-      sourceMap.set(p.id, inCohort && inDirect ? 'both' : inCohort ? 'cohort' : 'direct');
+      const inSubtree = subtreeIds.has(p.id);
+      // A depth-1 direct report of this manager keeps the legacy 'direct'
+      // tag; deeper transitive members are tagged 'subtree' (sub-managers).
+      const subtreeTag = p.manager_id === managerId ? 'direct' : 'subtree';
+      sourceMap.set(p.id, inCohort && inSubtree ? 'both' : inCohort ? 'cohort' : subtreeTag);
     }
   }
 
@@ -361,7 +392,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
   }
 
   // 5. Get all training modules
-  const { data: trainingModules } = await supabase
+  const { data: trainingModules } = await client
     .from('training_modules')
     .select('*')
     .is('deleted_at', null)
@@ -371,7 +402,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
 
   // 6. Get user_modules for all members in batch
   const memberIds = profiles.map(p => p.id);
-  const { data: userModulesData } = await supabase
+  const { data: userModulesData } = await client
     .from('user_modules')
     .select('*')
     .in('user_id', memberIds);

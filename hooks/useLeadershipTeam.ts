@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Profile } from '../types/database';
-import { getLeadershipByRegion } from '../services/teamService';
+import { getReportingChain } from '../services/teamService';
 
 export interface LeaderProfile {
   profile: Profile;
@@ -15,15 +15,16 @@ export interface UseLeadershipTeamReturn {
 }
 
 /**
- * Hook for fetching leadership team profiles by region
+ * Hook for fetching a user's leadership — their reporting chain
+ * (direct manager up to the top), ordered closest-first.
  */
-export function useLeadershipTeam(region: string | null | undefined): UseLeadershipTeamReturn {
+export function useLeadershipTeam(userId: string | null | undefined): UseLeadershipTeamReturn {
   const [leaders, setLeaders] = useState<LeaderProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchLeaders = useCallback(async () => {
-    if (!region) {
+    if (!userId) {
       setLeaders([]);
       setLoading(false);
       return;
@@ -33,7 +34,7 @@ export function useLeadershipTeam(region: string | null | undefined): UseLeaders
     setError(null);
 
     try {
-      const profiles = await getLeadershipByRegion(region);
+      const profiles = await getReportingChain(userId);
       setLeaders(
         profiles.map(p => ({
           profile: p,
@@ -45,7 +46,7 @@ export function useLeadershipTeam(region: string | null | undefined): UseLeaders
     } finally {
       setLoading(false);
     }
-  }, [region]);
+  }, [userId]);
 
   useEffect(() => {
     fetchLeaders();

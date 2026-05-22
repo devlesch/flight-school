@@ -13,6 +13,10 @@ vi.mock('../lib/supabase', () => ({
       signInWithOAuth: vi.fn(),
       signOut: vi.fn(),
     },
+    // RPC stub — covers get_my_role() / role_of() / descendant_ids() used by
+    // routing + impersonation. Returns no data so callers fall back to
+    // profile.role (the test fixtures still carry a `role` field).
+    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
     from: vi.fn().mockReturnValue({
       select: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({

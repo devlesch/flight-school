@@ -108,10 +108,36 @@ export async function getProfilesByRole(role: string): Promise<Profile[]> {
   return data as Profile[];
 }
 
-const LEADERSHIP_ROLES = ['Regional Director', 'General Manager', 'Assistant General Manager'];
+// profiles.standardized_role stores abbreviations (RD/GM/AGM/MxM/MxA), not full names.
+const LEADERSHIP_ROLES = ['RD', 'GM', 'AGM'];
 
 /**
- * Get leadership profiles for a region (RD, GM, AGM)
+ * Get a user's reporting chain — their direct manager, that manager's
+ * manager, and so on up to the top — ordered closest-first.
+ *
+ * Backed by the `get_ancestor_profiles` SECURITY DEFINER function
+ * (migration 024): a server-side recursive walk UP `manager_id`. Because
+ * it is SECURITY DEFINER it works for the user's own session even though
+ * the one-level `profiles` RLS would otherwise hide their leadership.
+ */
+export async function getReportingChain(userId: string): Promise<Profile[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('get_ancestor_profiles', {
+    uid: userId,
+  });
+
+  if (error) {
+    console.error('Error fetching reporting chain:', error.message);
+    return [];
+  }
+
+  return (data || []) as Profile[];
+}
+
+/**
+ * Get leadership profiles for a region (RD, GM, AGM).
+ * NOTE: superseded by getReportingChain for the "Your Leadership" box;
+ * retained (with test coverage) in case a region-wide view is needed.
  */
 export async function getLeadershipByRegion(region: string): Promise<Profile[]> {
   const { data, error } = await supabase

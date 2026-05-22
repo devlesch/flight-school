@@ -232,8 +232,8 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
   // Monthly Calendar State
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date(2026, 0, 1));
 
-  // Fetch leadership team from Supabase by region
-  const { leaders: leadershipData, loading: leadershipLoading } = useLeadershipTeam(myProfile.region);
+  // Fetch the user's reporting chain (direct manager up to the top)
+  const { leaders: leadershipData, loading: leadershipLoading } = useLeadershipTeam(myProfile.id);
   const unitLeaders = leadershipData.map(l => ({
     id: l.profile.id,
     name: l.profile.name,

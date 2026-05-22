@@ -142,10 +142,11 @@ Deno.serve(async (req: Request) => {
 
     // 3b. send_dm — Admin-only. Sends a Slack DM via the VIBE MCP.
     if (action === 'send_dm') {
-      // Verify admin role
+      // Verify admin via the is_admin column (the single source of truth for
+      // the only manually-stored status — `role` is now derived/meaningless).
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('role')
+        .select('is_admin')
         .eq('id', user.id)
         .single();
 
@@ -153,8 +154,8 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ success: false, error: `Profile lookup failed: ${profileError?.message || 'not found'}` });
       }
 
-      if (profile.role !== 'Admin') {
-        return jsonResponse({ success: false, error: `Admin role required (current: ${profile.role})` });
+      if (profile.is_admin !== true) {
+        return jsonResponse({ success: false, error: 'Admin role required' });
       }
 
       if (!email || !text) {

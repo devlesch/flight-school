@@ -7,17 +7,20 @@ const mockIn = vi.fn(() => ({ order: mockOrder }));
 const mockEq = vi.fn(() => ({ in: mockIn }));
 const mockSelect = vi.fn(() => ({ eq: mockEq }));
 const mockFrom = vi.fn(() => ({ select: mockSelect }));
+const mockRpc = vi.fn();
 
 vi.mock('../../lib/supabase', () => ({
   supabase: {
     from: mockFrom,
+    rpc: mockRpc,
   },
 }));
 
 // Import after mocking
-const { getLeadershipByRegion } = await import('../../services/teamService');
+const { getLeadershipByRegion, getReportingChain } = await import('../../services/teamService');
 
-const LEADERSHIP_ROLES = ['Regional Director', 'General Manager', 'Assistant General Manager'];
+// standardized_role stores abbreviations, matching the real profiles data.
+const LEADERSHIP_ROLES = ['RD', 'GM', 'AGM'];
 
 const mockRD: Profile = {
   id: 'rd-1',
@@ -28,7 +31,7 @@ const mockRD: Profile = {
   title: 'Regional Director',
   region: 'North East',
   location: null,
-  standardized_role: 'Regional Director',
+  standardized_role: 'RD',
   manager_id: null,
   department: 'Operations',
   start_date: null,
@@ -46,7 +49,7 @@ const mockGM: Profile = {
   title: 'General Manager',
   region: 'North East',
   location: null,
-  standardized_role: 'General Manager',
+  standardized_role: 'GM',
   manager_id: 'rd-1',
   department: 'Operations',
   start_date: null,
@@ -104,6 +107,40 @@ describe('getLeadershipByRegion()', () => {
       'Error fetching leadership by region:',
       'DB connection failed'
     );
+    consoleSpy.mockRestore();
+  });
+});
+
+describe('getReportingChain()', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls the get_ancestor_profiles RPC with the user id', async () => {
+    mockRpc.mockResolvedValue({ data: [mockGM], error: null });
+
+    const result = await getReportingChain('user-1');
+
+    expect(mockRpc).toHaveBeenCalledWith('get_ancestor_profiles', { uid: 'user-1' });
+    expect(result).toEqual([mockGM]);
+  });
+
+  it('returns empty array when the RPC returns null data', async () => {
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    const result = await getReportingChain('user-1');
+
+    expect(result).toEqual([]);
+  });
+
+  it('returns empty array and logs error on RPC error', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockRpc.mockResolvedValue({ data: null, error: { message: 'rpc failed' } });
+
+    const result = await getReportingChain('user-1');
+
+    expect(result).toEqual([]);
+    expect(consoleSpy).toHaveBeenCalledWith('Error fetching reporting chain:', 'rpc failed');
     consoleSpy.mockRestore();
   });
 });
