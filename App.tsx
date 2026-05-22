@@ -12,7 +12,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ConnectionStatus from './components/ConnectionStatus';
 import Sidebar from './components/Sidebar';
 import ImpersonationBanner from './components/ImpersonationBanner';
-import { isUserCohortLeader } from './services/cohortService';
+import { supabase } from './lib/supabase';
+import type { DerivedRole } from './hooks/useProfile';
 import { ToastProvider } from './components/Toast';
 import SupportFab from './components/SupportFab';
 import { Menu, Loader2 } from 'lucide-react';
@@ -53,13 +54,16 @@ function updateUrlParams(view: string, tab?: string) {
   window.history.replaceState(null, '', url);
 }
 
-// Map database role to UserRole enum
-function mapDbRoleToUserRole(dbRole: DbUserRole): UserRole {
-  switch (dbRole) {
+// Map the DERIVED role (from the get_my_role() / role_of() RPC — single source
+// of truth backed by is_admin / is_manager / is_manager_override) to the
+// UserRole enum used by routing. Routing NEVER reads the stored `profile.role`.
+function mapDbRoleToUserRole(derivedRole: DerivedRole | DbUserRole | null): UserRole {
+  switch (derivedRole) {
     case 'Admin':
       return UserRole.ADMIN;
     case 'Manager':
       return UserRole.MANAGER;
+    case 'NewHire':
     case 'New Hire':
       return UserRole.NEW_HIRE;
     default:
@@ -67,12 +71,26 @@ function mapDbRoleToUserRole(dbRole: DbUserRole): UserRole {
   }
 }
 
-// Convert Profile to legacy User interface for existing components
-function profileToUser(profile: Profile) {
+// Resolve a target user's derived role for admin "View-As" impersonation.
+// Calls the admin-only `role_of(uid)` RPC; returns null for non-admin callers.
+async function fetchDerivedRoleForTarget(targetId: string): Promise<DerivedRole | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('role_of', { uid: targetId });
+  if (error) {
+    console.error('Error resolving target role:', error.message);
+    return null;
+  }
+  return (data as DerivedRole) ?? null;
+}
+
+// Convert Profile to legacy User interface for existing components.
+// `role` is the DERIVED role for routing/display — falls back to the stored
+// role only if the derived role has not resolved yet.
+function profileToUser(profile: Profile, derivedRole: DerivedRole | null) {
   return {
     id: profile.id,
     name: profile.name,
-    role: mapDbRoleToUserRole(profile.role),
+    role: mapDbRoleToUserRole(derivedRole ?? profile.role),
     avatar: profile.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
     title: profile.title || '',
     email: profile.email,
@@ -83,7 +101,11 @@ function profileToUser(profile: Profile) {
 const App: React.FC = () => {
   // Authentication State (Supabase)
   const { user, loading: authLoading, error: authError, signIn, signOut } = useAuth();
-  const { profile, loading: profileLoading, error: profileError } = useProfile(user?.id);
+  const { profile, derivedRole, loading: profileLoading, error: profileError } = useProfile(user?.id);
+
+  // Derived role of the impersonation target (admin View-As), resolved via
+  // the admin-only role_of() RPC keyed by the target's id.
+  const [impersonatedRole, setImpersonatedRole] = useState<DerivedRole | null>(null);
 
   // View State (Dashboard Switching)
   const [currentView, setCurrentView] = useState<UserRole | null>(null);
@@ -102,7 +124,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (profile && !currentView) {
       const urlParams = readUrlParams();
-      const userRole = mapDbRoleToUserRole(profile.role);
+      const userRole = mapDbRoleToUserRole(derivedRole ?? profile.role);
       const isAdmin = userRole === UserRole.ADMIN;
 
       // Admins can deep-link to any view; others ignore the view param
@@ -120,7 +142,7 @@ const App: React.FC = () => {
         }
       }
     }
-  }, [profile, currentView]);
+  }, [profile, derivedRole, currentView]);
 
   // Reset view on logout
   useEffect(() => {
@@ -169,34 +191,33 @@ const App: React.FC = () => {
     setChildTab(undefined);
     setIsSidebarOpen(false);
 
-    // If user is a cohort leader, show Manager Dashboard regardless of profiles.role
-    const targetRole = mapDbRoleToUserRole(targetProfile.role);
-    if (targetRole !== UserRole.MANAGER && targetRole !== UserRole.ADMIN) {
-      const isCohortLeader = await isUserCohortLeader(targetProfile.id);
-      if (isCohortLeader) {
-        setCurrentView(UserRole.MANAGER);
-        return;
-      }
-    }
-    setCurrentView(targetRole);
+    // Impersonation routing uses the SAME derived-role logic as login,
+    // keyed by the target's id via the admin-only role_of() RPC. This
+    // replaces the old isUserCohortLeader special-case: a cohort leader is
+    // already 'Manager' under is_manager(), so role_of() returns 'Manager'.
+    const targetDerived = await fetchDerivedRoleForTarget(targetProfile.id);
+    setImpersonatedRole(targetDerived);
+    setCurrentView(mapDbRoleToUserRole(targetDerived ?? targetProfile.role));
   }, []);
 
   const handleExitImpersonation = useCallback(() => {
     setImpersonatedProfile(null);
+    setImpersonatedRole(null);
     if (profile) {
-      setCurrentView(mapDbRoleToUserRole(profile.role));
+      setCurrentView(mapDbRoleToUserRole(derivedRole ?? profile.role));
     }
     setAdminViewMode('dashboard');
     setChildTab(undefined);
-  }, [profile]);
+  }, [profile, derivedRole]);
 
   // Convert profile to user object for existing components
-  const currentUser = profile ? profileToUser(profile) : null;
+  const currentUser = profile ? profileToUser(profile, derivedRole) : null;
   const isAdmin = currentUser?.role === UserRole.ADMIN;
 
-  // Derive effective user: impersonated profile overrides currentUser for rendering
+  // Derive effective user: impersonated profile overrides currentUser for rendering.
+  // The impersonated user's role is the target's DERIVED role (role_of() RPC).
   const effectiveUser = impersonatedProfile
-    ? profileToUser(impersonatedProfile)
+    ? profileToUser(impersonatedProfile, impersonatedRole)
     : currentUser;
 
   const renderDashboard = () => {

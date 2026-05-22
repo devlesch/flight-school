@@ -23,6 +23,11 @@ UPDATE profiles SET is_admin = (role = 'Admin');
 
 CREATE INDEX IF NOT EXISTS idx_profiles_is_admin ON profiles(is_admin);
 
+-- is_manager_override: an OPTIONAL manual flag for the rare zero-report
+-- manager whose last direct report was deleted (manager_id ON DELETE SET NULL)
+-- and who leads no cohort. Default false — admins set it for that edge case.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_manager_override BOOLEAN NOT NULL DEFAULT false;
+
 -- ============================================
 -- 2. is_admin(uid) — is this profile a stored Admin?
 -- ============================================
@@ -33,12 +38,14 @@ $$ LANGUAGE SQL SECURITY DEFINER STABLE SET search_path = public;
 
 -- ============================================
 -- 3. is_manager(uid) — derived: has a direct report OR leads a cohort
+--    OR carries the manual is_manager_override flag (zero-report edge case)
 -- ============================================
 CREATE OR REPLACE FUNCTION is_manager(uid uuid)
 RETURNS boolean AS $$
   SELECT
     EXISTS (SELECT 1 FROM profiles WHERE manager_id = uid)
-    OR EXISTS (SELECT 1 FROM cohort_leaders WHERE profile_id = uid);
+    OR EXISTS (SELECT 1 FROM cohort_leaders WHERE profile_id = uid)
+    OR EXISTS (SELECT 1 FROM profiles WHERE id = uid AND is_manager_override);
 $$ LANGUAGE SQL SECURITY DEFINER STABLE SET search_path = public;
 
 -- ============================================
@@ -97,6 +104,23 @@ RETURNS text AS $$
   SELECT CASE
     WHEN is_admin(auth.uid()) THEN 'Admin'
     WHEN is_manager(auth.uid()) THEN 'Manager'
+    ELSE 'NewHire'
+  END;
+$$ LANGUAGE SQL SECURITY DEFINER STABLE SET search_path = public;
+
+-- ============================================
+-- 5b. role_of(uid) — derived role for an arbitrary user, ADMIN-ONLY.
+-- ============================================
+-- Same derivation as get_my_role() but keyed by an explicit `uid`. Used by
+-- admin "View-As" impersonation routing to resolve the TARGET's role. The
+-- internal guard returns NULL for non-admin callers (default-deny) so this
+-- cannot be used to probe roles by a non-admin.
+CREATE OR REPLACE FUNCTION role_of(uid uuid)
+RETURNS text AS $$
+  SELECT CASE
+    WHEN NOT is_admin(auth.uid()) THEN NULL
+    WHEN is_admin(uid) THEN 'Admin'
+    WHEN is_manager(uid) THEN 'Manager'
     ELSE 'NewHire'
   END;
 $$ LANGUAGE SQL SECURITY DEFINER STABLE SET search_path = public;

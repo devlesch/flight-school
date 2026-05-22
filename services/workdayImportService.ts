@@ -394,25 +394,10 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
     const existing = profilesByEmail.get(emailKey);
 
     if (existing) {
-      // If exists but not a Manager, upgrade role
-      if (existing.role !== 'Manager' && existing.role !== 'Admin') {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error: updateError } = await (supabase as any)
-            .from('profiles')
-            .update({ role: 'Manager' })
-            .eq('id', existing.id);
-
-          if (updateError) {
-            result.errors.push(`Failed to upgrade ${mgr.email} to Manager: ${updateError.message}`);
-          } else {
-            existing.role = 'Manager';
-            result.details.push(`Upgraded ${mgr.email} to Manager role`);
-          }
-        } catch (e) {
-          result.errors.push(`Error upgrading ${mgr.email}: ${e instanceof Error ? e.message : String(e)}`);
-        }
-      }
+      // Manager status is now DERIVED (is_manager: has a direct report OR
+      // leads a cohort). The Workday importer links manager_id in Pass 3,
+      // which makes this person a manager automatically — no `role` write.
+      // The importer must NEVER grant admin, so nothing is written here.
     } else {
       // Create new manager profile
       const mgrName = mgr.name || `${mgr.firstName} ${mgr.lastName}`.trim();
@@ -427,7 +412,7 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
             id: newId,
             email: mgr.email,
             name: mgrName,
-            role: 'Manager',
+            // No `role` — manager status is derived once reports link in Pass 3.
             avatar,
             provisioned: true,
           })
@@ -546,7 +531,7 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
             id: newId,
             email: row.email,
             name: workerName,
-            role: 'New Hire',
+            // No `role` — non-admin / new-hire status is the derived default.
             avatar,
             title: row.businessTitle || null,
             location: row.location || null,

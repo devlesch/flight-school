@@ -146,6 +146,8 @@ function profile(over: Partial<Profile> & { id: string }): Profile {
     email: over.email ?? `${over.id}@industriousoffice.com`,
     name: over.name ?? over.id,
     role: over.role ?? 'New Hire',
+    is_admin: over.is_admin ?? false,
+    is_manager_override: over.is_manager_override ?? false,
     avatar: null,
     title: over.title ?? null,
     region: over.region ?? null,

@@ -121,11 +121,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
   const [messageCounts, setMessageCounts] = useState<Record<string, number>>({});
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
 
+  // Derived manager signal: a profile is a "manager" if it is referenced as
+  // the manager_id of any other profile (has a direct report). `role` is no
+  // longer a source of truth — admin status is `is_admin`, manager is derived.
+  const managerIdSet = useMemo(
+    () => new Set(allUsers.map(u => u.manager_id).filter((id): id is string => !!id)),
+    [allUsers]
+  );
+  const isManagerProfile = (p: Profile) =>
+    (p as Profile & { is_admin?: boolean }).is_admin === true || managerIdSet.has(p.id);
+
   const filteredCommsUsers = useMemo(() => {
     let filtered = allUsers.filter(p =>
       messageTarget === 'managers'
-        ? p.role === 'Manager' || p.role === 'Admin'
-        : p.role === 'New Hire'
+        ? isManagerProfile(p)
+        : !isManagerProfile(p)
     );
     if (messageSearch.trim()) {
       const q = messageSearch.toLowerCase();
@@ -694,7 +704,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
     try {
       const isSlack = type === 'slack';
       const targetProfile = allUsers.find(u => u.id === targetUser.id);
-      const isManager = targetProfile?.role === 'Manager' || targetProfile?.role === 'Admin';
+      const isManager = targetProfile ? isManagerProfile(targetProfile) : false;
 
       let draft: string;
 
