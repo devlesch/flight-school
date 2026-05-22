@@ -233,10 +233,15 @@ export async function isUserCohortLeader(userId: string): Promise<boolean> {
  * Get a manager's cohort with enriched member data.
  * Resolves: manager → cohort_leaders → cohort (most recent) → profiles by date range → user_modules + training_modules
  */
-export async function getCohortMembersForManager(managerId: string): Promise<ManagerCohortData | null> {
+export async function getCohortMembersForManager(
+  managerId: string,
+  // Optional injectable Supabase client (backward-compatible — defaults to the
+  // module singleton). Used by tests to drive the query chain with fixtures.
+  client: typeof supabase = supabase,
+): Promise<ManagerCohortData | null> {
  try {
   // 1. Find cohorts this manager leads (by profile_id directly, or by email match for provisioned profiles)
-  const { data: leaderRows, error: leaderError } = await supabase
+  const { data: leaderRows, error: leaderError } = await client
     .from('cohort_leaders')
     .select('*, cohorts(*)')
     .eq('profile_id', managerId);
@@ -245,7 +250,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
   let resolvedLeaderRows = leaderRows;
   if ((!leaderRows || leaderRows.length === 0) && !leaderError) {
     // Get this manager's email
-    const { data: managerProfile } = await supabase
+    const { data: managerProfile } = await client
       .from('profiles')
       .select('email')
       .eq('id', managerId)
@@ -253,7 +258,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
 
     if (managerProfile?.email) {
       // Find cohort_leaders whose linked profile has the same email
-      const { data: emailMatch, error: emailError } = await supabase
+      const { data: emailMatch, error: emailError } = await client
         .from('cohort_leaders')
         .select('*, cohorts(*), profiles!inner(email)')
         .eq('profiles.email', managerProfile.email);
@@ -282,7 +287,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
     cohort = (withCohort[0] as any).cohorts as Cohort;
 
     // 3. Get all leaders for this cohort (with profiles)
-    const { data: allLeaders, error: leadersError } = await supabase
+    const { data: allLeaders, error: leadersError } = await client
       .from('cohort_leaders')
       .select('*, profiles(*)')
       .eq('cohort_id', cohort.id);
@@ -304,7 +309,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
       .map((r: any) => ({ role_label: r.role_label as string, region: r.region as string }));
 
     // Cohort membership: standardized_role + region + start_date — not system role
-    const { data: allCohortProfiles, error: membersError } = await supabase
+    const { data: allCohortProfiles, error: membersError } = await client
       .from('profiles')
       .select('*')
       .gte('start_date', cohort.hire_start_date)
@@ -322,7 +327,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
   }
 
   // Always fetch direct reports (manager_id = this manager)
-  const { data: directReports, error: directError } = await supabase
+  const { data: directReports, error: directError } = await client
     .from('profiles')
     .select('*')
     .eq('manager_id', managerId)
@@ -361,7 +366,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
   }
 
   // 5. Get all training modules
-  const { data: trainingModules } = await supabase
+  const { data: trainingModules } = await client
     .from('training_modules')
     .select('*')
     .is('deleted_at', null)
@@ -371,7 +376,7 @@ export async function getCohortMembersForManager(managerId: string): Promise<Man
 
   // 6. Get user_modules for all members in batch
   const memberIds = profiles.map(p => p.id);
-  const { data: userModulesData } = await supabase
+  const { data: userModulesData } = await client
     .from('user_modules')
     .select('*')
     .in('user_id', memberIds);
