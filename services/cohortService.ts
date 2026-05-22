@@ -22,7 +22,12 @@ export interface CohortMember {
   profile: Profile;
   progress: number;
   modules: UserModuleWithDetails[];
-  source: 'cohort' | 'direct' | 'both';
+  // 'cohort'  — matched a cohort slot only
+  // 'direct'  — a depth-1 direct report only
+  // 'subtree' — pulled in by the transitive manager_id walk at depth ≥ 2
+  //             (a sub-manager / nested report)
+  // 'both'    — matched a cohort slot AND is somewhere in the subtree
+  source: 'cohort' | 'direct' | 'subtree' | 'both';
 }
 
 export interface ManagerCohortData {
@@ -326,30 +331,51 @@ export async function getCohortMembersForManager(
     );
   }
 
-  // Always fetch direct reports (manager_id = this manager)
-  const { data: directReports, error: directError } = await client
-    .from('profiles')
-    .select('*')
-    .eq('manager_id', managerId)
-    .eq('role', 'New Hire')
-    .order('name', { ascending: true });
+  // Fetch the manager's full transitive manager_id subtree (direct reports,
+  // their reports, and so on) via the cycle-guarded `descendant_ids` RPC
+  // (migration 023). The recursive walk lives server-side because one-level
+  // RLS cannot traverse the chain client-side.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: descendantRows, error: descendantError } = await (client as any)
+    .rpc('descendant_ids', { root: managerId });
 
-  console.log('[CohortService] managerId:', managerId, 'directReports:', directReports?.length, 'error:', directError?.message, 'cohortSlotMembers:', cohortSlotMembers.length);
+  const descendantIds = ((descendantRows || []) as unknown[])
+    .map((r: any) => (typeof r === 'string' ? r : r?.descendant_ids ?? r?.id))
+    .filter((id: unknown): id is string => typeof id === 'string');
 
-  // Merge cohort slot members + direct reports, deduplicate by ID, tag source
+  let subtreeMembers: Profile[] = [];
+  if (descendantIds.length > 0) {
+    const { data: subtreeProfiles, error: subtreeError } = await client
+      .from('profiles')
+      .select('*')
+      .in('id', descendantIds);
+    if (subtreeError) {
+      console.error('Error fetching subtree profiles:', subtreeError.message);
+    }
+    subtreeMembers = ((subtreeProfiles || []) as Profile[])
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }
+
+  console.log('[CohortService] managerId:', managerId, 'subtreeMembers:', subtreeMembers.length, 'error:', descendantError?.message, 'cohortSlotMembers:', cohortSlotMembers.length);
+
+  // Merge cohort slot members + subtree members, deduplicate by ID, tag source
   const cohortIds = new Set(cohortSlotMembers.map(p => p.id));
-  const directIds = new Set((directReports || []).map((p: any) => p.id));
-  const sourceMap = new Map<string, 'cohort' | 'direct' | 'both'>();
+  const subtreeIds = new Set(subtreeMembers.map(p => p.id));
+  const sourceMap = new Map<string, 'cohort' | 'direct' | 'subtree' | 'both'>();
 
   const seen = new Set<string>();
   const mergedProfiles: Profile[] = [];
-  for (const p of [...cohortSlotMembers, ...(directReports || [])] as Profile[]) {
+  for (const p of [...cohortSlotMembers, ...subtreeMembers] as Profile[]) {
     if (!seen.has(p.id)) {
       seen.add(p.id);
       mergedProfiles.push(p);
       const inCohort = cohortIds.has(p.id);
-      const inDirect = directIds.has(p.id);
-      sourceMap.set(p.id, inCohort && inDirect ? 'both' : inCohort ? 'cohort' : 'direct');
+      const inSubtree = subtreeIds.has(p.id);
+      // A depth-1 direct report of this manager keeps the legacy 'direct'
+      // tag; deeper transitive members are tagged 'subtree' (sub-managers).
+      const subtreeTag = p.manager_id === managerId ? 'direct' : 'subtree';
+      sourceMap.set(p.id, inCohort && inSubtree ? 'both' : inCohort ? 'cohort' : subtreeTag);
     }
   }
 

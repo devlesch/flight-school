@@ -106,7 +106,37 @@ function makeFakeClient(tables: Tables) {
     return builder;
   }
 
-  return { from: (t: keyof Tables) => query(t) } as never;
+  // Fake of the `descendant_ids(root)` RPC (migration 023): walks `manager_id`
+  // transitively below `root` and returns the full descendant id closure.
+  // Mirrors the server function — cycle-guarded, so it terminates on cycles.
+  function rpc(fn: string, args: Record<string, unknown>) {
+    if (fn !== 'descendant_ids') {
+      return Promise.resolve({ data: null, error: { message: `unknown rpc ${fn}` } });
+    }
+    const root = args.root as string;
+    const ids: string[] = [];
+    const seen = new Set<string>([root]);
+    let frontier = [root];
+    while (frontier.length > 0) {
+      const next: string[] = [];
+      for (const parent of frontier) {
+        for (const p of tables.profiles) {
+          if (p.manager_id === parent && !seen.has(p.id)) {
+            seen.add(p.id);
+            ids.push(p.id);
+            next.push(p.id);
+          }
+        }
+      }
+      frontier = next;
+    }
+    return Promise.resolve({ data: ids, error: null });
+  }
+
+  return {
+    from: (t: keyof Tables) => query(t),
+    rpc: (fn: string, args: Record<string, unknown>) => rpc(fn, args),
+  } as never;
 }
 
 // --- Profile factory ---
@@ -186,19 +216,14 @@ describe('getCohortMembersForManager — 9bd1fe1 precedent + latent direct-repor
   });
 
   // ===========================================================================
-  // (b) RED BASELINE — latent bug at services/cohortService.ts:~329.
+  // (b) GREEN-FOR-THE-FIX — Task 3 removed `.eq('role','New Hire')` from the
+  //     direct-reports query and replaced the single-level fetch with the
+  //     transitive `descendant_ids` RPC walk.
   //
-  //     The direct-reports query carries `.eq('role', 'New Hire')`. A Manager
-  //     who reports to a GM (role='Manager', manager_id=<gm id>) is therefore
-  //     HIDDEN from that GM's overview.
-  //
-  //     This assertion documents CURRENT (buggy) behavior — it asserts the
-  //     Manager is ABSENT, so the suite stays green today.
-  //
-  //     >>> Task 3 will REMOVE the `.eq('role','New Hire')` filter and FLIP
-  //     >>> this assertion to expect the Manager to be PRESENT. <<<
+  //     A Manager who reports to a GM (role='Manager', manager_id=<gm id>) now
+  //     APPEARS in that GM's overview — previously hidden by the stale filter.
   // ===========================================================================
-  it('RED BASELINE: a Manager who reports to a GM is hidden from the GM overview by the current .eq(role, New Hire) direct-reports filter', async () => {
+  it('a Manager who reports to a GM IS present in the GM overview (the .eq(role, New Hire) direct-reports filter was removed)', async () => {
     const gm = profile({ id: 'gm-2', role: 'Manager', name: 'GM Two' });
 
     // A real Manager reporting up to the GM. role='Manager', manager_id=gm-2.
@@ -209,7 +234,7 @@ describe('getCohortMembersForManager — 9bd1fe1 precedent + latent direct-repor
       manager_id: 'gm-2',
     });
 
-    // A normal new hire reporting to the same GM — passes the role filter.
+    // A normal new hire reporting to the same GM.
     const newHire = profile({
       id: 'new-hire',
       role: 'New Hire',
@@ -230,10 +255,55 @@ describe('getCohortMembersForManager — 9bd1fe1 precedent + latent direct-repor
     expect(result).not.toBeNull();
     const memberIds = result!.members.map((m) => m.profile.id);
 
-    // CURRENT behavior: the new hire shows up...
+    // The new hire shows up...
     expect(memberIds).toContain('new-hire');
-    // ...but the sub-manager is HIDDEN by `.eq('role','New Hire')`.
-    // This is the documented latent bug. Task 3 flips this to `.toContain`.
-    expect(memberIds).not.toContain('sub-manager');
+    // ...and the sub-manager is now visible too (no `.eq('role','New Hire')`).
+    expect(memberIds).toContain('sub-manager');
+    // The sub-manager is a depth-1 direct report — tagged 'direct'.
+    expect(result!.members.find((m) => m.profile.id === 'sub-manager')?.source).toBe('direct');
+  });
+
+  // ===========================================================================
+  // (c) DEPTH ≥ 2 — the transitive walk reaches nested reports.
+  //     GM → MXM → MxA: the MxA is two levels below the GM and must appear
+  //     in the GM's overview, tagged 'subtree' (a sub-manager / nested report).
+  // ===========================================================================
+  it('a depth-≥2 transitive member (GM → MXM → MxA) appears in the GM overview tagged as subtree', async () => {
+    const gm = profile({ id: 'gm-3', role: 'Manager', name: 'GM Three' });
+
+    // Level 1: an MXM reporting directly to the GM.
+    const mxm = profile({
+      id: 'mxm-1',
+      role: 'Manager',
+      name: 'MXM One',
+      manager_id: 'gm-3',
+    });
+
+    // Level 2: an MxA reporting to the MXM — two levels below the GM.
+    const mxa = profile({
+      id: 'mxa-1',
+      role: 'New Hire',
+      name: 'MxA One',
+      manager_id: 'mxm-1',
+    });
+
+    const client = makeFakeClient({
+      profiles: [gm, mxm, mxa],
+      cohorts: [],
+      cohort_leaders: [],
+      training_modules: [],
+      user_modules: [],
+    });
+
+    const result = await getCohortMembersForManager('gm-3', client);
+
+    expect(result).not.toBeNull();
+    const memberIds = result!.members.map((m) => m.profile.id);
+
+    // The depth-1 MXM and the depth-2 MxA are both pulled in by the walk.
+    expect(memberIds).toContain('mxm-1');
+    expect(memberIds).toContain('mxa-1');
+    // The depth-2 MxA is tagged 'subtree' (transitive, not a direct report).
+    expect(result!.members.find((m) => m.profile.id === 'mxa-1')?.source).toBe('subtree');
   });
 });

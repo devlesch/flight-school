@@ -42,7 +42,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
 
   // Transform cohort members to NewHireProfile[] for existing UI components
   const hireSourceMap = useMemo(() => {
-    const map = new Map<string, 'cohort' | 'direct' | 'both'>();
+    const map = new Map<string, 'cohort' | 'direct' | 'subtree' | 'both'>();
     if (cohortData) {
       for (const m of cohortData.members) map.set(m.profile.id, m.source);
     }
@@ -787,6 +787,11 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                 .filter(h => h.name.toLowerCase().includes(teamSearch.toLowerCase()) || h.title.toLowerCase().includes(teamSearch.toLowerCase()))
                 .map((hire) => {
                  const overdueCount = hire.modules.filter(m => !m.completed && new Date(m.dueDate) < new Date()).length;
+                 // Sub-managers pulled in by the transitive subtree have no
+                 // applicable onboarding modules — render them as a neutral
+                 // roster entry, not a misleading red 0%/at-risk card.
+                 const isSubManager = hireSourceMap.get(hire.id) === 'subtree';
+                 const atRisk = !isSubManager && hire.progress < 20;
                  return (
                   <div 
                     key={hire.id} 
@@ -811,13 +816,22 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                     </div>
 
                     <div className="mt-4 pt-4 border-t border-[#F3EEE7]">
-                        <div className="flex justify-between text-xs mb-2">
-                           <span className="text-[#013E3F]/60 font-bold uppercase tracking-wide">Progress</span>
-                           <span className={`font-bold ${hire.progress < 20 ? 'text-red-500' : 'text-[#013E3F]'}`}>{hire.progress}%</span>
-                        </div>
-                        <div className="w-full bg-[#F3EEE7] h-2 rounded-full mb-4">
-                           <div className={`h-2 rounded-full transition-all duration-500 ${hire.progress < 20 ? 'bg-red-400' : 'bg-[#013E3F]'}`} style={{width: `${hire.progress}%`}}></div>
-                        </div>
+                        {isSubManager ? (
+                          <div className="flex justify-between text-xs mb-4">
+                             <span className="text-[#013E3F]/60 font-bold uppercase tracking-wide">Reporting Line</span>
+                             <span className="text-[10px] bg-[#F3EEE7] px-2 py-0.5 rounded text-[#013E3F]/60 font-bold uppercase tracking-wide">Sub-manager</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex justify-between text-xs mb-2">
+                               <span className="text-[#013E3F]/60 font-bold uppercase tracking-wide">Progress</span>
+                               <span className={`font-bold ${atRisk ? 'text-red-500' : 'text-[#013E3F]'}`}>{hire.progress}%</span>
+                            </div>
+                            <div className="w-full bg-[#F3EEE7] h-2 rounded-full mb-4">
+                               <div className={`h-2 rounded-full transition-all duration-500 ${atRisk ? 'bg-red-400' : 'bg-[#013E3F]'}`} style={{width: `${hire.progress}%`}}></div>
+                            </div>
+                          </>
+                        )}
                         <div className="flex justify-between items-center">
                             <span className="text-[10px] bg-[#F3EEE7] px-2 py-1 rounded text-[#013E3F]/60 font-bold uppercase tracking-wide">
                                {hire.department}
