@@ -25,14 +25,15 @@ describe('sendSlackDM', () => {
       error: null,
     });
 
-    // profiles.select(...).eq(...).single() → recipient lookup
+    // profiles.select(...).ilike(...).maybeSingle() → recipient lookup
+    // (case-insensitive so mixed-case stored emails match — Task 2)
     // slack_messages.insert(...) → log write
     supabaseAny.from = vi.fn().mockImplementation((table: string) => {
       if (table === 'profiles') {
         return {
           select: () => ({
-            eq: () => ({
-              single: vi.fn().mockResolvedValue({
+            ilike: () => ({
+              maybeSingle: vi.fn().mockResolvedValue({
                 data: { id: 'recipient-id' },
                 error: null,
               }),
@@ -95,13 +96,17 @@ describe('sendSlackDM', () => {
     expect(insertMock).not.toHaveBeenCalled();
   });
 
-  it('lowercases the recipient email when looking up profile', async () => {
-    const eqSpy = vi.fn().mockReturnValue({
-      single: vi.fn().mockResolvedValue({ data: { id: 'recipient-id' }, error: null }),
+  it('matches mixed-case stored emails via case-insensitive ilike lookup (Task 2)', async () => {
+    // Stored email is "Liam.Kinna@…"; the user passes the same case (or any case).
+    // The recipient lookup uses `.ilike('email', email)` so Postgres matches
+    // regardless of stored case. Previously the client lowered the search term
+    // and `.eq` missed mixed-case storage → silent INSERT skip.
+    const ilikeSpy = vi.fn().mockReturnValue({
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'liam-id' }, error: null }),
     });
     supabaseAny.from = vi.fn().mockImplementation((table: string) => {
       if (table === 'profiles') {
-        return { select: () => ({ eq: eqSpy }) };
+        return { select: () => ({ ilike: ilikeSpy }) };
       }
       if (table === 'slack_messages') {
         return { insert: insertMock };
@@ -109,7 +114,15 @@ describe('sendSlackDM', () => {
       throw new Error(`Unexpected table: ${table}`);
     });
 
-    await sendSlackDM('SAM@Example.COM', 'Hi Sam', { title: 'T' });
-    expect(eqSpy).toHaveBeenCalledWith('email', 'sam@example.com');
+    await sendSlackDM('Liam.Kinna@industriousoffice.com', 'Hi Liam', { title: 'T' });
+
+    // Lookup MUST be ilike on raw email (not lowercased), so mixed-case stored
+    // values match the search term regardless of caller-supplied case.
+    expect(ilikeSpy).toHaveBeenCalledWith('email', 'Liam.Kinna@industriousoffice.com');
+
+    // And the INSERT must fire with the resolved recipient_id (i.e. the
+    // case-mismatch silent-skip is gone).
+    expect(insertMock).toHaveBeenCalledTimes(1);
+    expect(insertMock.mock.calls[0][0].recipient_id).toBe('liam-id');
   });
 });

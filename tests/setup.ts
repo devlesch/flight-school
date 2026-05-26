@@ -42,6 +42,7 @@ vi.mock('../lib/supabase', () => ({
 // Cleanup after each test to prevent memory leaks
 afterEach(() => {
   cleanup();
+  __localStorageStore.clear();
 });
 
 // Mock Recharts to avoid SVG rendering issues in jsdom
@@ -112,6 +113,22 @@ Object.defineProperty(window, 'scrollTo', {
   writable: true,
   value: vi.fn(),
 });
+
+// Polyfill localStorage — vitest+jsdom default URL is "about:blank" (opaque
+// origin), which throws SecurityError on localStorage access. Use a minimal
+// in-memory shim so components that consult localStorage at mount don't crash.
+// Cleared in the existing afterEach below so per-test state stays isolated.
+const __localStorageStore = new Map<string, string>();
+const __localStorageMock: Storage = {
+  get length() { return __localStorageStore.size; },
+  clear: () => __localStorageStore.clear(),
+  getItem: (k) => (__localStorageStore.has(k) ? __localStorageStore.get(k)! : null),
+  key: (i) => Array.from(__localStorageStore.keys())[i] ?? null,
+  removeItem: (k) => { __localStorageStore.delete(k); },
+  setItem: (k, v) => { __localStorageStore.set(k, String(v)); },
+};
+Object.defineProperty(window, 'localStorage', { value: __localStorageMock, writable: true });
+Object.defineProperty(globalThis, 'localStorage', { value: __localStorageMock, writable: true });
 
 // Suppress console errors during tests (optional - can be removed for debugging)
 // vi.spyOn(console, 'error').mockImplementation(() => {});

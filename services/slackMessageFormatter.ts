@@ -26,6 +26,9 @@ export interface FormatSlackMessageOptions {
   title: string;
   body: string;
   kind?: string;
+  /** Name of the human who triggered the send. Rendered as a footer line so
+   *  recipients know it's from a person, not just the bot. */
+  from?: string;
 }
 
 function emojiFor(kind?: string): string {
@@ -39,8 +42,9 @@ function isAlreadyDecorated(text: string): boolean {
 }
 
 export function formatSlackMessage(opts: FormatSlackMessageOptions): string {
-  const { title, body, kind } = opts;
+  const { title, body, kind, from } = opts;
   if (isAlreadyDecorated(body)) return body;
   const emoji = emojiFor(kind);
-  return `${BRAND_BANNER}\n${DIVIDER}\n${emoji} *${title}*\n\n${body}`;
+  const footer = from ? `\n\n_— ${from}_` : '';
+  return `${BRAND_BANNER}\n${DIVIDER}\n${emoji} *${title}*\n\n${body}${footer}`;
 }
