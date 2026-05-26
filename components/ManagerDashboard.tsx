@@ -3,6 +3,7 @@ import { User, NewHireProfile, WorkbookPrompt, ManagerTask, TrainingModule } fro
 import { formatDate } from '../lib/formatDate';
 import { Slack, Mail, CheckSquare, Clock, AlertTriangle, MessageSquarePlus, ChevronRight, X, AlertCircle, CheckCircle, BookOpen, MessageCircle, Megaphone, ListTodo, Calendar, Timer, Info, Target, ArrowRight, LayoutDashboard, Eye, PlusCircle, Send, Users, UserCheck, ChevronLeft, ClipboardList, Briefcase, UserPlus, Search, Filter, UserCog, RefreshCw, Loader2 } from 'lucide-react';
 import { generateEmailDraft } from '../services/geminiService';
+import { sendSlackDM } from '../services/slackService';
 import { useToast } from './Toast';
 import confetti from 'canvas-confetti';
 import { useCohortTeam } from '../hooks/useCohortTeam';
@@ -130,6 +131,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
   const [viewingHireTab, setViewingHireTab] = useState<'overview' | 'workbook' | 'tracker'>('overview');
 
   const [drafting, setDrafting] = useState(false);
+  const [sendingSlack, setSendingSlack] = useState(false);
   const [generatedMessage, setGeneratedMessage] = useState<string | null>(null);
   
   // Fetch manager tasks when tracker tab opens for a student
@@ -270,8 +272,20 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
 
   const upcomingTasks = getWeeklyTasks();
 
-  const handleSlackNudge = (name: string) => {
-    toast.success(`Slack reminder sent to ${name}: "Hi! Checking in on your workbook progress."`);
+  const handleSlackNudge = async (hire: NewHireProfile) => {
+    const firstName = hire.name.split(' ')[0];
+    const body = `Hi ${firstName}! Checking in on your workbook progress.`;
+    setSendingSlack(true);
+    const result = await sendSlackDM(hire.email, body, { title: `A note for ${firstName}`, kind: 'slack' });
+    setSendingSlack(false);
+    if (result.success) {
+      toast.success('Slack message sent!');
+      if (!result.logged) {
+        toast.error('Sent — but not logged to Communications (check console)');
+      }
+    } else {
+      toast.error(`Failed to send: ${result.error || 'Unknown error'}`);
+    }
   };
 
   const handleGenerateNudge = async (hire: NewHireProfile) => {
@@ -1166,7 +1180,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
              </div>
              
              <div className="p-4 border-t border-[#F3EEE7] bg-white flex justify-end gap-3 z-10">
-                <button onClick={() => handleSlackNudge(viewingHire.name)} className="px-5 py-2.5 border border-[#013E3F]/10 rounded-lg text-xs font-bold uppercase tracking-wide hover:bg-[#F3EEE7] transition-colors text-[#013E3F]">Slack Nudge</button>
+                <button onClick={() => handleSlackNudge(viewingHire)} disabled={sendingSlack} className="px-5 py-2.5 border border-[#013E3F]/10 rounded-lg text-xs font-bold uppercase tracking-wide hover:bg-[#F3EEE7] transition-colors text-[#013E3F] disabled:opacity-50 disabled:cursor-not-allowed">{sendingSlack ? 'Sending…' : 'Slack Nudge'}</button>
                 <button onClick={() => { setViewingHire(null); handleGenerateNudge(viewingHire); }} className="px-5 py-2.5 bg-[#013E3F] text-[#F3EEE7] rounded-lg text-xs font-bold uppercase tracking-wide hover:bg-[#013E3F]/90 transition-colors shadow-lg shadow-[#013E3F]/20">Draft Email</button>
              </div>
           </div>
