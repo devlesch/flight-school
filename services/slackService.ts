@@ -42,12 +42,15 @@ export async function sendSlackDM(
     // Get current user as sender
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      // Look up recipient by email
+      // Look up recipient by email — case-insensitive because Workday-imported
+      // emails preserve case (`Liam.Kinna@…`) and Postgres `=` on TEXT is
+      // case-sensitive. `.ilike` matches across cases; `.maybeSingle()` returns
+      // `{ data: null, error: null }` on 0 rows instead of `.single()`'s error.
       const { data: recipient } = await supabase
         .from('profiles')
         .select('id')
-        .eq('email', email.toLowerCase())
-        .single();
+        .ilike('email', email)
+        .maybeSingle();
 
       if (recipient) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
