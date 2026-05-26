@@ -24,10 +24,24 @@ describe('formatSlackMessage — shape', () => {
     expect(out).toContain(':rocket: *Welcome aboard*');
   });
 
-  it('preserves the body verbatim at the tail', () => {
+  it('preserves the body verbatim at the tail (no `from`)', () => {
     const body = 'Multi-line body\nwith a second line.';
     const out = formatSlackMessage({ title: 'T', body, kind: 'slack' });
     expect(out.endsWith(body)).toBe(true);
+  });
+
+  it('appends a sender attribution footer when `from` is provided', () => {
+    const out = formatSlackMessage({ title: 'T', body: 'Hi Sam', kind: 'slack', from: 'Bob Smith' });
+    expect(out.endsWith('\n\n_— Bob Smith_')).toBe(true);
+    // Body stays intact, footer is its own paragraph.
+    expect(out).toContain('Hi Sam\n\n_— Bob Smith_');
+  });
+
+  it('omits the footer when `from` is missing or empty', () => {
+    const noFrom = formatSlackMessage({ title: 'T', body: 'B', kind: 'slack' });
+    expect(noFrom).not.toContain('_— ');
+    const emptyFrom = formatSlackMessage({ title: 'T', body: 'B', kind: 'slack', from: '' });
+    expect(emptyFrom).not.toContain('_— ');
   });
 
   it('produces the full canonical layout', () => {

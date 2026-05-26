@@ -212,7 +212,9 @@ describe('ManagerDashboard', () => {
       const [emailArg, bodyArg, optsArg] = mockSendSlackDM.mock.calls[0];
       expect(emailArg).toBe(slackTestHireProfile.email);
       expect(bodyArg).toBe('Hi Jordan! Checking in on your workbook progress.');
-      expect(optsArg).toEqual({ title: 'A note for Jordan', kind: 'slack' });
+      expect(optsArg).toMatchObject({ title: 'A note for Jordan', kind: 'slack' });
+      // `from` must be the signed-in user's name so recipients know who triggered it.
+      expect(optsArg.from).toBe(testManager.name);
     });
   });
 });

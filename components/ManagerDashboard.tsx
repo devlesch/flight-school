@@ -276,7 +276,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
     const firstName = hire.name.split(' ')[0];
     const body = `Hi ${firstName}! Checking in on your workbook progress.`;
     setSendingSlack(true);
-    const result = await sendSlackDM(hire.email, body, { title: `A note for ${firstName}`, kind: 'slack' });
+    const result = await sendSlackDM(hire.email, body, { title: `A note for ${firstName}`, kind: 'slack', from: user.name });
     setSendingSlack(false);
     if (result.success) {
       toast.success('Slack message sent!');
