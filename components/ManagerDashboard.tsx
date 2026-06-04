@@ -1,19 +1,21 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { User, NewHireProfile, WorkbookPrompt, ManagerTask, TrainingModule } from '../types';
 import { formatDate } from '../lib/formatDate';
-import { Slack, Mail, CheckSquare, Clock, AlertTriangle, MessageSquarePlus, ChevronRight, X, AlertCircle, CheckCircle, BookOpen, MessageCircle, Megaphone, ListTodo, Calendar, Timer, Info, Target, ArrowRight, LayoutDashboard, Eye, PlusCircle, Send, Users, UserCheck, ChevronLeft, ClipboardList, Briefcase, UserPlus, Search, Filter, UserCog, RefreshCw, Loader2 } from 'lucide-react';
+import { Slack, Mail, CheckSquare, Clock, AlertTriangle, MessageSquarePlus, ChevronRight, X, AlertCircle, CheckCircle, Circle, BookOpen, MessageCircle, Megaphone, ListTodo, Calendar, Timer, Info, Target, ArrowRight, LayoutDashboard, Eye, PlusCircle, Send, Users, UserCheck, ChevronLeft, ClipboardList, Briefcase, UserPlus, Search, Filter, UserCog, RefreshCw, Loader2 } from 'lucide-react';
 import { generateEmailDraft } from '../services/geminiService';
 import { sendSlackDM } from '../services/slackService';
 import { useToast } from './Toast';
 import confetti from 'canvas-confetti';
 import { useCohortTeam } from '../hooks/useCohortTeam';
 import { useManagerTasks } from '../hooks/useManagerTasks';
+import { useManagerSelfTasks } from '../hooks/useManagerSelfTasks';
+import type { SelfTaskWithTemplate } from '../services/managerSelfTaskService';
 import { getUserTasks, initializeTasksForNewHire, updateTaskCompletion, TaskWithTemplate } from '../services/managerTaskService';
 import { syncLessonlyStatus } from '../services/lessonlySyncService';
 
 interface ManagerDashboardProps {
   user: User;
-  initialTab?: 'team' | 'tracker';
+  initialTab?: 'team' | 'tracker' | 'my-tasks';
   onTabChange?: (tab: string) => void;
 }
 
@@ -37,6 +39,8 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
   console.log('[ManagerDashboard] user.id:', user.id, 'user.name:', user.name);
   const { data: cohortData, loading: teamLoading } = useCohortTeam(user.id);
   const { tasks: supabaseTasks, loading: tasksLoading, toggleComplete } = useManagerTasks(user.id);
+  // Personal "My Manager Path" checklist — the manager's own onboarding tasks.
+  const { tasks: selfTasks, anchorMissing: selfAnchorMissing, loading: selfLoading, toggleComplete: toggleSelf } = useManagerSelfTasks(user.id);
 
   // Team filter
   const [teamFilter, setTeamFilter] = useState<'all' | 'cohort' | 'direct'>('all');
@@ -115,11 +119,17 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
     }
     return true;
   });
-  const [activeTab, setActiveTabRaw] = useState<'team' | 'tracker'>(initialTab ?? 'team');
-  const setActiveTab = (tab: 'team' | 'tracker') => {
+  const [activeTab, setActiveTabRaw] = useState<'team' | 'tracker' | 'my-tasks'>(initialTab ?? 'team');
+  const setActiveTab = (tab: 'team' | 'tracker' | 'my-tasks') => {
     setActiveTabRaw(tab);
     onTabChange?.(tab);
   };
+  // Sync when the tab is driven from outside (Sidebar / deep-link) after mount.
+  useEffect(() => {
+    if (initialTab) setActiveTabRaw(initialTab);
+  }, [initialTab]);
+  // Filter for the personal "My Manager Path" checklist.
+  const [showSelfIncompleteOnly, setShowSelfIncompleteOnly] = useState(false);
 
   // Calendar State
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
@@ -213,17 +223,18 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
 
   // --- WEEK AT A GLANCE AGGREGATION ---
   const getWeeklyTasks = () => {
-    let tasks: { 
-      id: string; 
-      title: string; 
-      hireName: string; 
+    let tasks: {
+      id: string;
+      title: string;
+      hireName: string;
       hireAvatar: string;
-      dueDate: Date; 
-      dueDateStr: string; 
-      type: 'TRAINING' | 'ADMIN'; 
+      dueDate: Date;
+      dueDateStr: string;
+      type: 'TRAINING' | 'ADMIN' | 'SELF';
       completed: boolean;
-      hire: NewHireProfile; 
+      hire?: NewHireProfile;
       moduleType?: string;
+      isSelf?: boolean;
     }[] = [];
 
     myHires.forEach(hire => {
@@ -267,10 +278,56 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
       }
     });
 
+    // The manager's own personal tasks ("My Manager Path").
+    selfTasks.forEach(t => {
+      if (t.completed || !t.due_date) return;
+      tasks.push({
+        id: t.id,
+        title: t.template?.title || 'Manager task',
+        hireName: 'You',
+        hireAvatar: user.avatar,
+        dueDate: new Date(t.due_date + 'T00:00:00'),
+        dueDateStr: t.due_date,
+        type: 'SELF',
+        completed: false,
+        isSelf: true,
+      });
+    });
+
     return tasks.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
   };
 
   const upcomingTasks = getWeeklyTasks();
+
+  // Overdue items across ALL weeks — surfaced as a strip so nothing pending is
+  // hidden just because the calendar is parked on a different week.
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const overdueCalendarTasks = upcomingTasks.filter(t => t.dueDate < startOfToday);
+
+  // --- MY MANAGER PATH (personal checklist) derived state ---
+  const selfTasksSorted = useMemo(() => {
+    return [...selfTasks].sort((a, b) => {
+      const da = a.due_date ? new Date(a.due_date + 'T00:00:00').getTime() : Infinity;
+      const db = b.due_date ? new Date(b.due_date + 'T00:00:00').getTime() : Infinity;
+      return da - db;
+    });
+  }, [selfTasks]);
+  const selfCompletedCount = selfTasks.filter(t => t.completed).length;
+  const selfProgress = selfTasks.length ? Math.round((selfCompletedCount / selfTasks.length) * 100) : 0;
+  const selfOverdue = selfAnchorMissing
+    ? []
+    : selfTasksSorted.filter(t => !t.completed && t.due_date && new Date(t.due_date + 'T00:00:00') < new Date());
+  const selfNextUp = selfTasksSorted.find(t => !t.completed);
+  const visibleSelfTasks = showSelfIncompleteOnly ? selfTasksSorted.filter(t => !t.completed) : selfTasksSorted;
+
+  const handleToggleSelf = (task: SelfTaskWithTemplate) => {
+    const newVal = !task.completed;
+    toggleSelf(task.id, newVal);
+    if (newVal) {
+      confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 }, colors: ['#FDD344', '#013E3F'] });
+    }
+  };
 
   const handleSlackNudge = async (hire: NewHireProfile) => {
     const firstName = hire.name.split(' ')[0];
@@ -493,18 +550,227 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 pb-20">
+      {/* --- WEEK AT A GLANCE (always visible: team + personal tasks) --- */}
+          <div className="bg-white rounded-xl shadow-sm border border-[#013E3F]/10 overflow-hidden mb-2">
+            <div className="bg-[#FDD344] p-4 flex items-center justify-between text-[#013E3F]">
+               <div className="flex items-center gap-3">
+                 <Calendar className="w-5 h-5 text-[#013E3F]" />
+                 <h3 className="font-serif text-lg font-medium">Your Week at a Glance</h3>
+               </div>
+               <div className="flex items-center gap-4">
+                  <span className="text-sm font-bold uppercase tracking-wider">
+                     {weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                  <div className="flex bg-[#013E3F]/10 rounded-lg">
+                    <button onClick={() => changeWeek(-1)} className="p-2 hover:bg-[#013E3F]/20 rounded-l-lg transition-colors"><ChevronLeft className="w-4 h-4" /></button>
+                    <div className="w-[1px] bg-[#013E3F]/20"></div>
+                    <button onClick={() => changeWeek(1)} className="p-2 hover:bg-[#013E3F]/20 rounded-r-lg transition-colors"><ChevronRight className="w-4 h-4" /></button>
+                  </div>
+               </div>
+            </div>
+            
+            <div className="bg-[#F3EEE7] px-4 py-2 flex flex-wrap gap-4 border-b border-[#013E3F]/5">
+               <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#013E3F]/60">
+                  <div className="w-2.5 h-2.5 bg-red-600 border border-red-800 rounded-sm"></div> Manager Led Training
+               </div>
+               <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#013E3F]/60">
+                  <div className="w-2.5 h-2.5 bg-amber-100 border border-amber-300 rounded-sm"></div> Admin Task
+               </div>
+               <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#013E3F]/60">
+                  <div className="w-2.5 h-2.5 bg-[#FDD344] border border-[#e5be2e] rounded-sm"></div> My Tasks
+               </div>
+            </div>
+
+            {overdueCalendarTasks.length > 0 && (
+              <div className="bg-red-50 px-4 py-2 border-b border-red-200 flex items-center gap-3 overflow-x-auto">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-red-700 shrink-0">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Overdue ({overdueCalendarTasks.length})
+                </div>
+                <div className="flex items-center gap-2">
+                  {overdueCalendarTasks.map(task => {
+                    const isManagerLed = task.moduleType === 'MANAGER_LED';
+                    return (
+                      <button
+                        key={task.id}
+                        onClick={() => task.isSelf ? setActiveTab('my-tasks') : openHireModal(task.hire!, task.type === 'TRAINING' ? 'overview' : 'tracker')}
+                        title={`${task.title} · ${task.hireName} · due ${task.dueDateStr}`}
+                        className={`shrink-0 text-[10px] px-2 py-1 rounded border shadow-sm cursor-pointer hover:shadow-md transition-all flex items-center gap-1.5 ${task.isSelf ? 'bg-[#FDD344] border-[#e5be2e] text-[#013E3F] font-bold' : isManagerLed ? 'bg-red-600 border-red-800 text-white font-bold' : task.type === 'TRAINING' ? 'bg-red-100 border-red-300 text-red-900' : 'bg-amber-50 border-amber-300 text-amber-900'}`}
+                      >
+                        <span className="truncate max-w-[140px]">{task.title}</span>
+                        <span className="opacity-70 whitespace-nowrap">{task.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-7 bg-[#F3EEE7] border-b border-[#013E3F]/10">
+              {weekDays.map(day => (
+                <div key={day.toString()} className="py-2 text-center text-xs font-bold uppercase tracking-wide text-[#013E3F]/60">
+                  {day.toLocaleDateString('en-US', { weekday: 'short' })}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 bg-[#F3EEE7] gap-[1px] border-l border-[#013E3F]/10">
+               {weekDays.map(day => {
+                 const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+                 const dayTasks = upcomingTasks.filter(t => t.dueDateStr === dateStr);
+                 const isToday = new Date().toDateString() === day.toDateString(); 
+
+                 return (
+                    <div key={day.toString()} className={`min-h-[150px] bg-white border-r border-b border-[#013E3F]/10 p-2 relative group hover:bg-[#F3EEE7]/10 transition-colors ${isToday ? 'bg-[#FDD344]/5' : ''}`}>
+                      <span className={`text-xs font-bold absolute top-2 left-2 ${isToday ? 'text-[#013E3F] bg-[#FDD344] px-1.5 rounded' : 'text-[#013E3F]/50'}`}>{day.getDate()}</span>
+                      <div className="mt-6 space-y-1.5">
+                        {dayTasks.map(task => {
+                          const isManagerLed = task.moduleType === 'MANAGER_LED';
+                          return (
+                            <div
+                              key={task.id}
+                              onClick={() => task.isSelf ? setActiveTab('my-tasks') : openHireModal(task.hire!, task.type === 'TRAINING' ? 'overview' : 'tracker')}
+                              className={`text-[10px] p-1.5 rounded border shadow-sm cursor-pointer hover:shadow-md transition-all ${task.isSelf ? 'bg-[#FDD344] border-[#e5be2e] text-[#013E3F] border-l-4 border-l-[#013E3F] font-bold' : isManagerLed ? 'bg-red-600 border-red-800 text-white border-l-4 font-bold' : task.type === 'TRAINING' ? 'bg-red-50 border-red-200 text-red-900 border-l-4 border-l-red-500' : 'bg-amber-50 border-amber-200 text-amber-900 border-l-4 border-l-amber-500'}`}
+                            >
+                              <div className="truncate leading-tight">{task.title}</div>
+                              <div className="mt-1 flex items-center gap-1.5">
+                                 <img src={task.hireAvatar} alt={task.hireName} className="w-4 h-4 rounded-full border border-black/10" />
+                                 <span className={`${isManagerLed ? 'text-white/80' : 'opacity-80'} truncate`}>{task.hireName.split(' ')[0]}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                 );
+               })}
+            </div>
+          </div>
+
       <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-[#F3EEE7]/10 pb-6 gap-4">
         <div>
           <h2 className="text-3xl font-medium text-[#F3EEE7] font-serif">
-            {activeTab === 'team' ? 'My Team' : 'Onboarding Tracker'}
+            {activeTab === 'team' ? 'My Team' : activeTab === 'my-tasks' ? 'My Manager Path' : 'Onboarding Tracker'}
           </h2>
           <p className="text-[#F3EEE7]/70 mt-2 font-light text-lg">
-            {activeTab === 'team' ? 'Overview of your direct reports.' : 'Consolidated manager checklist for your team.'}
+            {activeTab === 'team' ? 'Overview of your direct reports.' : activeTab === 'my-tasks' ? 'Your personal onboarding checklist as a manager.' : 'Consolidated manager checklist for your team.'}
           </p>
         </div>
-        
-        {/* Tab switcher hidden — only one tab */}
+
+        <div className="flex gap-1 p-1 bg-[#012d2e] rounded-lg border border-[#F3EEE7]/10 shrink-0">
+          {([['team', 'My Team'], ['my-tasks', 'My Manager Path']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`px-4 py-2 rounded text-[11px] font-bold uppercase tracking-wider transition-colors ${activeTab === key ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/50 hover:text-[#F3EEE7]'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* --- MY MANAGER PATH (personal checklist) --- */}
+      {activeTab === 'my-tasks' && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {selfLoading ? (
+            <div className="flex items-center justify-center min-h-[300px]">
+              <Loader2 className="w-8 h-8 text-[#FDD344] animate-spin" />
+            </div>
+          ) : selfTasks.length === 0 ? (
+            <div className="mt-8 p-10 bg-[#F3EEE7]/10 rounded-xl border border-[#F3EEE7]/10 text-[#F3EEE7]/50 italic text-center">
+              No manager onboarding tasks have been set up yet. Check back soon.
+            </div>
+          ) : (
+            <>
+              {/* Progress header */}
+              <div className="bg-[#012d2e] p-6 rounded-xl border border-[#F3EEE7]/10">
+                <div className="flex items-end justify-between mb-4">
+                  <div>
+                    <h3 className="font-serif text-xl text-[#F3EEE7]">Your Progress</h3>
+                    <p className="text-[#F3EEE7]/50 text-sm mt-1">
+                      {showSelfIncompleteOnly ? 'Showing remaining tasks' : 'Complete these to get fully ramped as a manager.'}
+                    </p>
+                  </div>
+                  <button onClick={() => setShowSelfIncompleteOnly(v => !v)} className="text-right group">
+                    <span className="block text-3xl font-serif text-[#FDD344]">{selfProgress}%</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#F3EEE7]/40 group-hover:text-[#FDD344]">
+                      {showSelfIncompleteOnly ? 'Show All' : 'Tap to Filter'}
+                    </span>
+                  </button>
+                </div>
+                <div className="w-full bg-[#F3EEE7]/10 rounded-full h-3 overflow-hidden">
+                  <div className="h-full bg-[#FDD344] rounded-full transition-all duration-1000 ease-out" style={{ width: `${selfProgress}%` }}></div>
+                </div>
+              </div>
+
+              {/* Up Next / Overdue */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-[#013E3F] rounded-xl p-6 text-[#F3EEE7] border border-[#F3EEE7]/10">
+                  <div className="text-xs font-bold uppercase tracking-widest text-[#FDD344] mb-1 flex items-center gap-2">
+                    <ArrowRight className="w-4 h-4" /> Up Next
+                  </div>
+                  {selfNextUp ? (
+                    <>
+                      <h3 className="font-serif text-xl font-medium mb-1 truncate">{selfNextUp.template?.title}</h3>
+                      {!selfAnchorMissing && selfNextUp.due_date && (
+                        <p className="text-sm opacity-70">Due {formatDate(selfNextUp.due_date)}</p>
+                      )}
+                    </>
+                  ) : (
+                    <h3 className="font-serif text-xl font-medium">All caught up!</h3>
+                  )}
+                </div>
+                {!selfAnchorMissing && selfOverdue.length > 0 && (
+                  <div className="bg-red-50 rounded-xl p-6 text-red-900 border border-red-100">
+                    <div className="text-xs font-bold uppercase tracking-widest text-red-600 mb-1 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" /> Attention Needed
+                    </div>
+                    <h3 className="font-serif text-xl font-medium mb-1">{selfOverdue.length} Overdue Task{selfOverdue.length > 1 ? 's' : ''}</h3>
+                    <p className="text-sm text-red-700/70 truncate">{selfOverdue[0].template?.title}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Task list */}
+              <div className="space-y-3">
+                {visibleSelfTasks.map(task => {
+                  const overdue = !selfAnchorMissing && !task.completed && !!task.due_date && new Date(task.due_date + 'T00:00:00') < new Date();
+                  return (
+                    <div
+                      key={task.id}
+                      onClick={() => handleToggleSelf(task)}
+                      className={`p-4 rounded-xl border flex items-center gap-4 cursor-pointer transition-all ${task.completed ? 'bg-[#012d2e]/40 border-[#F3EEE7]/5 opacity-70' : 'bg-white border-[#013E3F]/5 hover:border-[#FDD344]'}`}
+                    >
+                      {task.completed
+                        ? <CheckCircle className="w-6 h-6 text-[#FDD344] shrink-0" />
+                        : <Circle className="w-6 h-6 text-[#013E3F]/30 shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-bold text-sm ${task.completed ? 'text-[#F3EEE7]/50 line-through' : 'text-[#013E3F]'}`}>{task.template?.title}</p>
+                        {task.template?.description && (
+                          <p className={`text-xs mt-0.5 ${task.completed ? 'text-[#F3EEE7]/30' : 'text-[#013E3F]/50'}`}>{task.template.description}</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-1.5">
+                          {!selfAnchorMissing && task.due_date && (
+                            <span className={`text-[10px] font-bold uppercase ${overdue ? 'text-red-600' : 'text-[#013E3F]/40'}`}>
+                              {overdue ? 'Overdue · ' : 'Due '}{formatDate(task.due_date)}
+                            </span>
+                          )}
+                          {task.template?.time_estimate && (
+                            <span className="text-[10px] text-[#013E3F]/40 flex items-center gap-1"><Timer className="w-3 h-3" /> {task.template.time_estimate}</span>
+                          )}
+                          {task.template?.link && (
+                            <a href={task.template.link} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] font-bold uppercase text-[#013E3F]/60 hover:text-[#FDD344]">Open link</a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* --- TRACKER VIEW --- */}
       {activeTab === 'tracker' && (
@@ -703,73 +969,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
       {/* --- TEAM GRID VIEW --- */}
       {activeTab === 'team' && (
         <div className="space-y-8 animate-in fade-in duration-300">
-          <div className="bg-white rounded-xl shadow-sm border border-[#013E3F]/10 overflow-hidden mb-2">
-            <div className="bg-[#FDD344] p-4 flex items-center justify-between text-[#013E3F]">
-               <div className="flex items-center gap-3">
-                 <Calendar className="w-5 h-5 text-[#013E3F]" />
-                 <h3 className="font-serif text-lg font-medium">Your Week at a Glance</h3>
-               </div>
-               <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold uppercase tracking-wider">
-                     {weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
-                  <div className="flex bg-[#013E3F]/10 rounded-lg">
-                    <button onClick={() => changeWeek(-1)} className="p-2 hover:bg-[#013E3F]/20 rounded-l-lg transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-                    <div className="w-[1px] bg-[#013E3F]/20"></div>
-                    <button onClick={() => changeWeek(1)} className="p-2 hover:bg-[#013E3F]/20 rounded-r-lg transition-colors"><ChevronRight className="w-4 h-4" /></button>
-                  </div>
-               </div>
-            </div>
-            
-            <div className="bg-[#F3EEE7] px-4 py-2 flex flex-wrap gap-4 border-b border-[#013E3F]/5">
-               <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#013E3F]/60">
-                  <div className="w-2.5 h-2.5 bg-red-600 border border-red-800 rounded-sm"></div> Manager Led Training
-               </div>
-               <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#013E3F]/60">
-                  <div className="w-2.5 h-2.5 bg-amber-100 border border-amber-300 rounded-sm"></div> Admin Task
-               </div>
-            </div>
-            
-            <div className="grid grid-cols-7 bg-[#F3EEE7] border-b border-[#013E3F]/10">
-              {weekDays.map(day => (
-                <div key={day.toString()} className="py-2 text-center text-xs font-bold uppercase tracking-wide text-[#013E3F]/60">
-                  {day.toLocaleDateString('en-US', { weekday: 'short' })}
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-7 bg-[#F3EEE7] gap-[1px] border-l border-[#013E3F]/10">
-               {weekDays.map(day => {
-                 const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-                 const dayTasks = upcomingTasks.filter(t => t.dueDateStr === dateStr);
-                 const isToday = new Date().toDateString() === day.toDateString(); 
-
-                 return (
-                    <div key={day.toString()} className={`min-h-[150px] bg-white border-r border-b border-[#013E3F]/10 p-2 relative group hover:bg-[#F3EEE7]/10 transition-colors ${isToday ? 'bg-[#FDD344]/5' : ''}`}>
-                      <span className={`text-xs font-bold absolute top-2 left-2 ${isToday ? 'text-[#013E3F] bg-[#FDD344] px-1.5 rounded' : 'text-[#013E3F]/50'}`}>{day.getDate()}</span>
-                      <div className="mt-6 space-y-1.5">
-                        {dayTasks.map(task => {
-                          const isManagerLed = task.moduleType === 'MANAGER_LED';
-                          return (
-                            <div 
-                              key={task.id} 
-                              onClick={() => openHireModal(task.hire, task.type === 'TRAINING' ? 'overview' : 'tracker')}
-                              className={`text-[10px] p-1.5 rounded border shadow-sm cursor-pointer hover:shadow-md transition-all ${isManagerLed ? 'bg-red-600 border-red-800 text-white border-l-4 font-bold' : task.type === 'TRAINING' ? 'bg-red-50 border-red-200 text-red-900 border-l-4 border-l-red-500' : 'bg-amber-50 border-amber-200 text-amber-900 border-l-4 border-l-amber-500'}`}
-                            >
-                              <div className="truncate leading-tight">{task.title}</div>
-                              <div className="mt-1 flex items-center gap-1.5">
-                                 <img src={task.hireAvatar} alt={task.hireName} className="w-4 h-4 rounded-full border border-black/10" />
-                                 <span className={`${isManagerLed ? 'text-white/80' : 'opacity-80'} truncate`}>{task.hireName.split(' ')[0]}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                 );
-               })}
-            </div>
-          </div>
 
           {/* TEAM LIST SEARCH */}
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[#012d2e] p-6 rounded-xl border border-[#F3EEE7]/10">

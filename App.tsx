@@ -35,7 +35,7 @@ const ROLE_TO_VIEW: Record<UserRole, string> = {
 };
 
 const VALID_ADMIN_TABS: AdminViewMode[] = ['dashboard', 'workflow', 'tasks', 'cohorts', 'agenda', 'communications', 'engagement', 'settings'];
-const VALID_MANAGER_TABS = ['team', 'tracker'] as const;
+const VALID_MANAGER_TABS = ['team', 'tracker', 'my-tasks'] as const;
 const VALID_NEWHIRE_TABS = ['dashboard', 'calendar', 'workbook'] as const;
 
 function readUrlParams(): { view: UserRole | null; tab: string | null } {
@@ -226,7 +226,7 @@ const App: React.FC = () => {
       case UserRole.ADMIN:
         return <AdminDashboard user={effectiveUser} viewMode={adminViewMode} setViewMode={setAdminViewMode} />;
       case UserRole.MANAGER:
-        return <ManagerDashboard user={effectiveUser} initialTab={childTab as 'team' | 'tracker' | undefined} onTabChange={handleChildTabChange} />;
+        return <ManagerDashboard user={effectiveUser} initialTab={childTab as 'team' | 'tracker' | 'my-tasks' | undefined} onTabChange={handleChildTabChange} />;
       case UserRole.NEW_HIRE:
         return <NewHireDashboard user={effectiveUser} initialTab={childTab as 'dashboard' | 'calendar' | 'workbook' | undefined} onTabChange={handleChildTabChange} />;
       default:
