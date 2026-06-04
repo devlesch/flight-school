@@ -794,7 +794,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
             {viewMode === 'dashboard' && 'High-level status of Industrious onboarding.'}
             {viewMode === 'workflow' && 'Import team members, manage active registry, and automate training.'}
             {viewMode === 'tasks' && 'Manage training modules and assignments.'}
-            {viewMode === 'manager-tasks' && 'Manage onboarding tasks assigned to managers for their new hires.'}
+            {viewMode === 'manager-tasks' && 'Manage the onboarding tasks each manager completes for their own ramp-up.'}
             {viewMode === 'cohorts' && 'Regional performance and manager drill-downs.'}
           </p>
       </div>
@@ -2458,7 +2458,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
               <div>
                 <h3 className="text-3xl font-serif text-[#013E3F]">Task Registry</h3>
                 <p className="text-sm italic text-[#013E3F]/60 mt-4 leading-relaxed">
-                  <strong>All Tasks:</strong> Onboarding tasks that managers must complete for each new hire.
+                  <strong>All Tasks:</strong> Onboarding tasks every manager completes for their own onboarding, dated off their start date.
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -2593,7 +2593,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
             }} className="space-y-6">
               <div className="space-y-2">
                 <label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Task Title</label>
-                <input required className="w-full bg-[#013E3F] border-b border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" placeholder="Schedule 1:1 with new hire" value={managerTaskData.title} onChange={e => setManagerTaskData({...managerTaskData, title: e.target.value})} />
+                <input required className="w-full bg-[#013E3F] border-b border-[#F3EEE7]/20 focus:border-[#FDD344] outline-none py-2" placeholder="Complete manager onboarding training" value={managerTaskData.title} onChange={e => setManagerTaskData({...managerTaskData, title: e.target.value})} />
               </div>
               <div className="space-y-2">
                 <label className="text-[11px] font-bold uppercase text-[#FDD344]/80">Description</label>

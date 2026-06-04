@@ -905,6 +905,28 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
                    </div>
                 </div>
                 
+                {/* Overdue strip — surfaces past-due tasks regardless of the month shown */}
+                {overdueTasks.length > 0 && (
+                  <div className="bg-red-50 px-4 py-2 border-b border-red-200 flex items-center gap-3 overflow-x-auto">
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-red-700 shrink-0">
+                      <AlertTriangle className="w-3.5 h-3.5" /> Overdue ({overdueTasks.length})
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {overdueTasks.map(m => (
+                        <button
+                          key={m.id}
+                          onClick={() => setActiveTab('dashboard')}
+                          title={`${m.title} · due ${m.dueDate}`}
+                          className="shrink-0 text-[10px] px-2 py-1 rounded border border-red-300 bg-red-100 text-red-900 shadow-sm cursor-pointer hover:shadow-md transition-all flex items-center gap-1.5"
+                        >
+                          <span className="truncate max-w-[140px]">{m.title}</span>
+                          <span className="opacity-70 whitespace-nowrap">{new Date(m.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Calendar Grid Header (7 Cols) */}
                 <div className="grid grid-cols-7 bg-[#F3EEE7] border-b border-[#013E3F]/10">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (

@@ -287,6 +287,35 @@ export interface Database {
           due_date?: string | null;
         };
       };
+      manager_self_tasks: {
+        Row: {
+          id: string;
+          manager_id: string;
+          template_id: string;
+          completed: boolean;
+          completed_at: string | null;
+          due_date: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          manager_id: string;
+          template_id: string;
+          completed?: boolean;
+          completed_at?: string | null;
+          due_date?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          manager_id?: string;
+          template_id?: string;
+          completed?: boolean;
+          completed_at?: string | null;
+          due_date?: string | null;
+          created_at?: string;
+        };
+      };
       shoutouts: {
         Row: {
           id: string;
@@ -499,6 +528,7 @@ export type UserOkr = Database['public']['Tables']['user_okrs']['Row'];
 
 export type ManagerTaskTemplate = Database['public']['Tables']['manager_task_templates']['Row'];
 export type UserManagerTask = Database['public']['Tables']['user_manager_tasks']['Row'];
+export type ManagerSelfTask = Database['public']['Tables']['manager_self_tasks']['Row'];
 
 export type Shoutout = Database['public']['Tables']['shoutouts']['Row'];
 export type WorkbookResponse = Database['public']['Tables']['workbook_responses']['Row'];
