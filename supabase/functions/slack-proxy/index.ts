@@ -104,11 +104,18 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ success: false, error: 'MCP secret not configured' });
       }
 
+      const writeSecret = Deno.env.get('FLIGHTSCHOOL_SYSTEM_WRITE_SECRET');
+      if (!writeSecret) {
+        return jsonResponse({ success: false, error: 'Vibe system write secret not configured' });
+      }
+
       const mcpResponse = await fetch('https://industriousvibe.vercel.app/api/mcp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${mcpSecret}`,
+          'X-Vibe-System-Client': 'flightschool',
+          'X-Vibe-System-Write-Secret': writeSecret,
         },
         body: JSON.stringify({
           jsonrpc: '2.0',
@@ -167,11 +174,18 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ success: false, error: 'MCP secret not configured' });
       }
 
+      const writeSecret = Deno.env.get('FLIGHTSCHOOL_SYSTEM_WRITE_SECRET');
+      if (!writeSecret) {
+        return jsonResponse({ success: false, error: 'Vibe system write secret not configured' });
+      }
+
       const mcpResponse = await fetch('https://industriousvibe.vercel.app/api/mcp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${mcpSecret}`,
+          'X-Vibe-System-Client': 'flightschool',
+          'X-Vibe-System-Write-Secret': writeSecret,
         },
         body: JSON.stringify({
           jsonrpc: '2.0',
