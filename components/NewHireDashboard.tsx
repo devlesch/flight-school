@@ -78,7 +78,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
   const [cohortStartingDate, setCohortStartingDate] = useState<string | null>(null);
   useEffect(() => {
     const startDate = myProfile.startDate;
-    if (startDate && startDate !== new Date().toISOString().split('T')[0]) {
+    if (startDate) {
       getCohortStartingDateForUser(startDate).then(date => {
         if (date) setCohortStartingDate(date);
       });
