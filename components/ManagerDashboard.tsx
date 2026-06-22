@@ -572,7 +572,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
       <div className="flex items-center gap-3 bg-[#012d2e] p-4 rounded-xl border border-[#F3EEE7]/10">
         <span className="text-[10px] font-bold uppercase tracking-widest text-[#F3EEE7]/40">Calendar</span>
         <div className="flex gap-1 p-1 bg-[#013E3F] rounded-lg">
-          {([['mine', 'Mine'], ['cohort', 'Cohort'], ['direct', 'Direct']] as const).map(([key, label]) => (
+          {([['direct', 'Direct'], ['cohort', 'Cohort'], ['mine', 'Mine']] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setCalendarFilter(key)}
