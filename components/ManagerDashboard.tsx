@@ -81,6 +81,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
           link: m.link || undefined,
           host: m.host || undefined,
           score: m.score || undefined,
+          audience: m.audience,
         })),
       };
     });
@@ -133,6 +134,9 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
 
   // Calendar State
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
+  // Which tasks the calendar shows: the manager's own ("mine"), manager-led
+  // cohort training ("cohort"), or everything assigned to direct reports ("direct").
+  const [calendarFilter, setCalendarFilter] = useState<'mine' | 'cohort' | 'direct'>('mine');
 
   const [selectedHireForEmail, setSelectedHireForEmail] = useState<NewHireProfile | null>(null);
   const [viewingHire, setViewingHire] = useState<NewHireProfile | null>(null);
@@ -237,9 +241,41 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
       isSelf?: boolean;
     }[] = [];
 
-    myHires.forEach(hire => {
+    // "Mine" — the manager's own personal tasks ("My Manager Path"). Nothing else.
+    if (calendarFilter === 'mine') {
+      selfTasks.forEach(t => {
+        if (t.completed || !t.due_date) return;
+        tasks.push({
+          id: t.id,
+          title: t.template?.title || 'Manager task',
+          hireName: 'You',
+          hireAvatar: user.avatar,
+          dueDate: new Date(t.due_date + 'T00:00:00'),
+          dueDateStr: t.due_date,
+          type: 'SELF',
+          completed: false,
+          isSelf: true,
+        });
+      });
+      return tasks.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+    }
+
+    // "Cohort" / "Direct" both draw from report training, separated by the
+    // module's AUDIENCE (not member source) — a report can be in the cohort AND
+    // a direct report ('both'), so source overlaps but audience does not.
+    const wantAudience = calendarFilter === 'cohort' ? 'cohort' : 'direct';
+
+    allHires.forEach(hire => {
+      // Cohort: only MANAGER_LED training. Direct: all calendar training (manager-led + live calls).
       hire.modules
-        .filter(m => (m.type === 'MANAGER_LED' || m.type === 'LIVE_CALL') && !m.completed)
+        .filter(m => {
+          if (m.completed) return false;
+          const audience = m.audience || 'cohort'; // null audience = cohort
+          if (audience !== wantAudience) return false;
+          return calendarFilter === 'cohort'
+            ? m.type === 'MANAGER_LED'
+            : m.type === 'MANAGER_LED' || m.type === 'LIVE_CALL';
+        })
         .forEach(m => {
           const d = new Date(m.dueDate + 'T00:00:00');
           tasks.push({
@@ -255,44 +291,28 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
             hire: hire
           });
         });
+    });
 
-      if (hire.managerTasks) {
-        hire.managerTasks.forEach(t => {
-           if (!t.completed) {
-             const due = new Date(hire.startDate);
-             due.setDate(due.getDate() + t.dueDateOffset);
-             
-             tasks.push({
-               id: t.id,
-               title: t.title,
-               hireName: hire.name,
-               hireAvatar: hire.avatar,
-               dueDate: due,
-               dueDateStr: `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`,
-               type: 'ADMIN',
-               completed: false,
-               hire: hire
-             });
-           }
+    // Direct also includes the manager's admin/onboarding tasks tied to each report.
+    if (calendarFilter === 'direct') {
+      const hireById = new Map(allHires.map(h => [h.id, h]));
+      supabaseTasks.forEach(t => {
+        if (t.completed || !t.due_date) return;
+        const hire = hireById.get(t.new_hire_id);
+        if (!hire) return;
+        tasks.push({
+          id: t.id,
+          title: t.template?.title || 'Manager task',
+          hireName: hire.name,
+          hireAvatar: hire.avatar,
+          dueDate: new Date(t.due_date + 'T00:00:00'),
+          dueDateStr: t.due_date,
+          type: 'ADMIN',
+          completed: false,
+          hire: hire,
         });
-      }
-    });
-
-    // The manager's own personal tasks ("My Manager Path").
-    selfTasks.forEach(t => {
-      if (t.completed || !t.due_date) return;
-      tasks.push({
-        id: t.id,
-        title: t.template?.title || 'Manager task',
-        hireName: 'You',
-        hireAvatar: user.avatar,
-        dueDate: new Date(t.due_date + 'T00:00:00'),
-        dueDateStr: t.due_date,
-        type: 'SELF',
-        completed: false,
-        isSelf: true,
       });
-    });
+    }
 
     return tasks.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
   };
@@ -548,6 +568,22 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 pb-20">
+      {/* --- CALENDAR FILTER (controls which tasks the calendar shows) --- */}
+      <div className="flex items-center gap-3 bg-[#012d2e] p-4 rounded-xl border border-[#F3EEE7]/10">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#F3EEE7]/40">Calendar</span>
+        <div className="flex gap-1 p-1 bg-[#013E3F] rounded-lg">
+          {([['mine', 'Mine'], ['cohort', 'Cohort'], ['direct', 'Direct']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setCalendarFilter(key)}
+              className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors ${calendarFilter === key ? 'bg-[#FDD344] text-[#013E3F]' : 'text-[#F3EEE7]/50 hover:text-[#F3EEE7]'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* --- WEEK AT A GLANCE (always visible: team + personal tasks) --- */}
           <div className="bg-white rounded-xl shadow-sm border border-[#013E3F]/10 overflow-hidden mb-2">
             <div className="bg-[#FDD344] p-4 flex items-center justify-between text-[#013E3F]">
