@@ -410,7 +410,7 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
           .from('profiles')
           .insert({
             id: newId,
-            email: mgr.email,
+            email: normalizeEmail(mgr.email),
             name: mgrName,
             // No `role` — manager status is derived once reports link in Pass 3.
             avatar,
@@ -529,7 +529,7 @@ export async function importWorkdayData(rows: WorkdayRow[]): Promise<ImportResul
           .from('profiles')
           .insert({
             id: newId,
-            email: row.email,
+            email: normalizeEmail(row.email),
             name: workerName,
             // No `role` — non-admin / new-hire status is the derived default.
             avatar,
