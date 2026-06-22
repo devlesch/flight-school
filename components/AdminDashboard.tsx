@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { NewHireProfile, User, CalendarEvent, TrainingModule, UserRole } from '../types';
-import { formatDate } from '../lib/formatDate';
+import { formatDate, isOverdue } from '../lib/formatDate';
 import type { Profile, TrainingModule as DbTrainingModule, ModuleType } from '../types/database';
 // Mock imports removed — KPIs and AI analytics now use real Supabase data via useAdminDashboard()
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, LabelList, PieChart as RePieChart, Pie, Tooltip, LineChart, Line, AreaChart, Area } from 'recharts';
@@ -336,7 +336,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
 
   const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<typeof calendarEvents[number] | null>(null);
 
-  const isHireBehind = (h: NewHireProfile) => h.progress < 25 || h.modules.some(m => !m.completed && new Date(m.dueDate) < new Date());
+  const isHireBehind = (h: NewHireProfile) => h.progress < 25 || h.modules.some(m => !m.completed && isOverdue(m.dueDate));
 
   const regionalData = useMemo(() => {
     const regions = ['East', 'West', 'Central'];
@@ -718,7 +718,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
           completedCount: s.modules.filter(m => m.completed).length,
           totalCount: s.modules.length,
           overdueItems: s.modules
-            .filter(m => !m.completed && new Date(m.dueDate + 'T00:00:00') < new Date())
+            .filter(m => !m.completed && isOverdue(m.dueDate))
             .map(m => m.title),
         }));
         draft = await generateManagerDraft(user.name, targetUser.name, summaries, isSlack);
@@ -727,7 +727,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
         const studentData = students.find(s => s.id === targetUser.id);
         const progress = studentData?.progress || 0;
         const overdueItems = studentData?.modules
-          .filter(m => !m.completed && new Date(m.dueDate + 'T00:00:00') < new Date())
+          .filter(m => !m.completed && isOverdue(m.dueDate))
           .map(m => m.title) || [];
         const topic = isSlack ? 'Quick check-in on Slack' : 'Onboarding progress update';
         draft = await generateEmailDraft(targetUser.name, user.name, progress, topic, overdueItems);
@@ -2008,14 +2008,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                         Attention Needed (Overdue)
                       </h4>
                       <div className="space-y-3">
-                        {selectedHireForDrilldown.modules.filter(m => !m.completed && new Date(m.dueDate) < new Date()).length === 0 ? (
+                        {selectedHireForDrilldown.modules.filter(m => !m.completed && isOverdue(m.dueDate)).length === 0 ? (
                           <div className="p-4 bg-green-50 border border-green-100 rounded-lg text-center">
                               <p className="text-sm font-medium text-green-700 flex items-center justify-center gap-2">
                                 <CheckCircle className="w-4 h-4" /> No overdue items.
                               </p>
                           </div>
                         ) : (
-                          selectedHireForDrilldown.modules.filter(m => !m.completed && new Date(m.dueDate) < new Date()).map(m => (
+                          selectedHireForDrilldown.modules.filter(m => !m.completed && isOverdue(m.dueDate)).map(m => (
                             <div key={m.id} className="bg-white border border-red-100 p-4 rounded-lg shadow-sm flex justify-between items-center group hover:border-red-200 transition-colors">
                                 <div>
                                   <p className="font-bold text-red-700 text-sm mb-1">{m.title}</p>
@@ -2044,13 +2044,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, viewMode, setView
                           </thead>
                           <tbody className="divide-y divide-[#F3EEE7]">
                             {selectedHireForDrilldown.modules.map(m => {
-                              const isOverdue = !m.completed && new Date(m.dueDate) < new Date();
+                              const moduleOverdue = !m.completed && isOverdue(m.dueDate);
                               return (
                                 <tr key={m.id} className="hover:bg-[#F3EEE7]/20 transition-colors">
                                   <td className="p-4 font-medium text-[#013E3F]">
                                     <div className="flex flex-col">
                                       <span>{m.title}</span>
-                                      {isOverdue && <span className="text-red-500 text-[10px] font-bold uppercase mt-1">Overdue since {formatDate(m.dueDate)}</span>}
+                                      {moduleOverdue && <span className="text-red-500 text-[10px] font-bold uppercase mt-1">Overdue since {formatDate(m.dueDate)}</span>}
                                     </div>
                                   </td>
                                   <td className="p-4 text-xs font-bold text-[#013E3F]/60">{m.host || 'General Manager'}</td>
