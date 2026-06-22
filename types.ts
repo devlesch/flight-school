@@ -41,6 +41,7 @@ export interface TrainingModule {
   completed: boolean;
   dueDate: string; // ISO String (YYYY-MM-DD)
   link?: string;
+  audience?: string | null; // 'cohort' | 'direct' — who the module is assigned to
   score?: number; // Added score field (0-100)
   host?: string; // Added host field for live calls
   likes?: number;

@@ -16,6 +16,7 @@ export interface UserModuleWithDetails {
   link: string | null;
   host: string | null;
   score: number | null;
+  audience: string | null;
 }
 
 export interface CohortMember {
@@ -459,6 +460,7 @@ export async function getCohortMembersForManager(
         link: mod.link || null,
         host: mod.host || null,
         score: userMod?.score ?? null,
+        audience: modAudience,
       };
     });
 
