@@ -136,7 +136,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
   // Which tasks the calendar shows: the manager's own ("mine"), manager-led
   // cohort training ("cohort"), or everything assigned to direct reports ("direct").
-  const [calendarFilter, setCalendarFilter] = useState<'mine' | 'cohort' | 'direct'>('mine');
+  const [calendarFilter, setCalendarFilter] = useState<'mine' | 'cohort' | 'direct'>('direct');
 
   const [selectedHireForEmail, setSelectedHireForEmail] = useState<NewHireProfile | null>(null);
   const [viewingHire, setViewingHire] = useState<NewHireProfile | null>(null);
