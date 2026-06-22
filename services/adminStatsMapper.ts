@@ -1,6 +1,7 @@
 import type { Profile, UserModule, TrainingModule as DbTrainingModule } from '../types/database';
 import type { NewHireProfile, TrainingModule } from '../types';
 import { UserRole } from '../types';
+import { isOverdue } from '../lib/formatDate';
 
 /**
  * Maps Supabase Profile + UserModule + TrainingModule data into
@@ -100,6 +101,6 @@ export function computeAdminStats(students: NewHireProfile[]): {
 export function isHireBehind(hire: NewHireProfile): boolean {
   if (hire.progress < 25) return true;
   return hire.modules.some(
-    m => !m.completed && new Date(m.dueDate) < new Date()
+    m => !m.completed && isOverdue(m.dueDate)
   );
 }

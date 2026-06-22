@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, NewHireProfile, TrainingModule } from '../types';
-import { formatDate } from '../lib/formatDate';
+import { formatDate, isOverdue } from '../lib/formatDate';
 // Static UI content — intentionally kept as constant (not user data)
 import { UNIVERSAL_SERVICE_STEPS } from '../constants';
 import { CheckCircle, Circle, Video, FileText, ArrowRight, Slack, Megaphone, Target, ClipboardList, Users, UserCheck, BookOpen, X, Save, AtSign, Lightbulb, PenTool, MessageSquare, Quote, ChevronRight, Calendar as CalendarIcon, ChevronLeft, AlertTriangle, ArrowUpRight, PlayCircle, MapPin, LayoutDashboard, HeartHandshake, Eye, Star, Compass, ListOrdered, Info, Briefcase, MessageCircle, Globe, GraduationCap, LifeBuoy, User as UserIcon, Link as LinkIcon, ThumbsUp, Send, Timer, Loader2 } from 'lucide-react';
@@ -550,7 +550,7 @@ const NewHireDashboard: React.FC<NewHireDashboardProps> = ({ user, initialTab, o
   };
 
   // --- BANNER LOGIC ---
-  const overdueTasks = myModules.filter(m => !completedModules.has(m.id) && new Date(m.dueDate) < new Date());
+  const overdueTasks = myModules.filter(m => !completedModules.has(m.id) && isOverdue(m.dueDate));
   // Sort incomplete tasks by due date to find next up
   const incompleteTasks = myModules
     .filter(m => !completedModules.has(m.id))

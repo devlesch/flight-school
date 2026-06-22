@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { User, NewHireProfile, WorkbookPrompt, ManagerTask, TrainingModule } from '../types';
-import { formatDate } from '../lib/formatDate';
+import { formatDate, isOverdue } from '../lib/formatDate';
 import { Slack, Mail, CheckSquare, Clock, AlertTriangle, MessageSquarePlus, ChevronRight, X, AlertCircle, CheckCircle, Circle, BookOpen, MessageCircle, Megaphone, ListTodo, Calendar, Timer, Info, Target, ArrowRight, LayoutDashboard, Eye, PlusCircle, Send, Users, UserCheck, ChevronLeft, ClipboardList, Briefcase, UserPlus, Search, Filter, UserCog, RefreshCw, Loader2 } from 'lucide-react';
 import { generateEmailDraft } from '../services/geminiService';
 import { sendSlackDM } from '../services/slackService';
@@ -301,9 +301,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
 
   // Overdue items across ALL weeks — surfaced as a strip so nothing pending is
   // hidden just because the calendar is parked on a different week.
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const overdueCalendarTasks = upcomingTasks.filter(t => t.dueDate < startOfToday);
+  const overdueCalendarTasks = upcomingTasks.filter(t => isOverdue(t.dueDate));
 
   // --- MY MANAGER PATH (personal checklist) derived state ---
   const selfTasksSorted = useMemo(() => {
@@ -317,7 +315,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
   const selfProgress = selfTasks.length ? Math.round((selfCompletedCount / selfTasks.length) * 100) : 0;
   const selfOverdue = selfAnchorMissing
     ? []
-    : selfTasksSorted.filter(t => !t.completed && t.due_date && new Date(t.due_date + 'T00:00:00') < new Date());
+    : selfTasksSorted.filter(t => !t.completed && t.due_date && isOverdue(t.due_date));
   const selfNextUp = selfTasksSorted.find(t => !t.completed);
   const visibleSelfTasks = showSelfIncompleteOnly ? selfTasksSorted.filter(t => !t.completed) : selfTasksSorted;
 
@@ -348,7 +346,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
   const handleGenerateNudge = async (hire: NewHireProfile) => {
     setDrafting(true);
     const overdue = hire.modules
-      .filter(m => !m.completed && new Date(m.dueDate) < new Date())
+      .filter(m => !m.completed && isOverdue(m.dueDate))
       .map(m => m.title);
     const topic = overdue.length > 0 ? "Urgent: Overdue Training Items" : "Checking in on training workbook";
     const draft = await generateEmailDraft(hire.name, user.name, hire.progress, topic, overdue);
@@ -449,7 +447,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
     const baseDate = cohortData?.cohort?.starting_date || hire.startDate;
     const dueDate = new Date(baseDate);
     dueDate.setDate(dueDate.getDate() + task.dueDateOffset);
-    return dueDate < new Date();
+    return isOverdue(dueDate);
   };
 
   // --- LOADING STATE ---
@@ -734,7 +732,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
               {/* Task list */}
               <div className="space-y-3">
                 {visibleSelfTasks.map(task => {
-                  const overdue = !selfAnchorMissing && !task.completed && !!task.due_date && new Date(task.due_date + 'T00:00:00') < new Date();
+                  const overdue = !selfAnchorMissing && !task.completed && !!task.due_date && isOverdue(task.due_date);
                   return (
                     <div
                       key={task.id}
@@ -999,7 +997,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
               {myHires
                 .filter(h => h.name.toLowerCase().includes(teamSearch.toLowerCase()) || h.title.toLowerCase().includes(teamSearch.toLowerCase()))
                 .map((hire) => {
-                 const overdueCount = hire.modules.filter(m => !m.completed && new Date(m.dueDate) < new Date()).length;
+                 const overdueCount = hire.modules.filter(m => !m.completed && isOverdue(m.dueDate)).length;
                  // Sub-managers pulled in by the transitive subtree have no
                  // applicable onboarding modules — render them as a neutral
                  // roster entry, not a misleading red 0%/at-risk card.
@@ -1129,14 +1127,14 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                         Attention Needed (Overdue)
                       </h4>
                       <div className="space-y-3">
-                        {viewingHire.modules.filter(m => !m.completed && new Date(m.dueDate) < new Date()).length === 0 ? (
+                        {viewingHire.modules.filter(m => !m.completed && isOverdue(m.dueDate)).length === 0 ? (
                           <div className="p-4 bg-green-50 border border-green-100 rounded-lg text-center">
                               <p className="text-sm font-medium text-green-700 flex items-center justify-center gap-2">
                                 <CheckCircle className="w-4 h-4" /> No overdue items.
                               </p>
                           </div>
                         ) : (
-                          viewingHire.modules.filter(m => !m.completed && new Date(m.dueDate) < new Date()).map(m => (
+                          viewingHire.modules.filter(m => !m.completed && isOverdue(m.dueDate)).map(m => (
                             <div key={m.id} className="bg-white border border-red-100 p-4 rounded-lg shadow-sm flex justify-between items-center group hover:border-red-200 transition-colors">
                                 <div>
                                   <p className="font-bold text-red-700 text-sm mb-1">{m.title}</p>
@@ -1189,14 +1187,14 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                           </thead>
                           <tbody className="divide-y divide-[#F3EEE7]">
                             {viewingHire.modules.map(m => {
-                              const isOverdue = !m.completed && new Date(m.dueDate) < new Date();
+                              const moduleOverdue = !m.completed && isOverdue(m.dueDate);
                               const canReassign = m.type === 'MANAGER_LED' || m.type === 'LIVE_CALL';
                               return (
                                 <tr key={m.id} className="hover:bg-[#F3EEE7]/20 transition-colors">
                                   <td className="p-4 font-medium text-[#013E3F]">
                                     <div className="flex flex-col">
                                       <span>{m.title}</span>
-                                      {isOverdue && <span className="text-red-500 text-[10px] font-bold uppercase mt-1">Overdue since {formatDate(m.dueDate)}</span>}
+                                      {moduleOverdue && <span className="text-red-500 text-[10px] font-bold uppercase mt-1">Overdue since {formatDate(m.dueDate)}</span>}
                                     </div>
                                   </td>
                                   <td className="p-4 text-xs font-bold text-[#013E3F]/60">
@@ -1344,28 +1342,28 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ user, initialTab, o
                          const offset = tmpl?.due_date_offset ?? 0;
                          const isPreBoarding = offset < 0;
                          const dueDate = task.due_date ? new Date(task.due_date + 'T00:00:00') : null;
-                         const isOverdue = !isCompleted && dueDate && dueDate < new Date();
+                         const isTaskOverdue = !isCompleted && dueDate && isOverdue(dueDate);
                          return (
                            <div
                               key={task.id}
                               onClick={() => handleToggleManagerTask(task.id)}
-                              className={`p-4 rounded-lg border cursor-pointer transition-all group flex items-start gap-4 ${isCompleted ? 'bg-green-50 border-green-200' : isOverdue ? 'bg-red-50 border-red-300 ring-2 ring-red-500/20' : 'bg-white border-[#013E3F]/10 hover:border-[#013E3F]/30 shadow-sm'}`}
+                              className={`p-4 rounded-lg border cursor-pointer transition-all group flex items-start gap-4 ${isCompleted ? 'bg-green-50 border-green-200' : isTaskOverdue ? 'bg-red-50 border-red-300 ring-2 ring-red-500/20' : 'bg-white border-[#013E3F]/10 hover:border-[#013E3F]/30 shadow-sm'}`}
                            >
-                              <div className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition-colors ${isCompleted ? 'bg-green-600 border-green-600 text-white' : isOverdue ? 'bg-red-600 border-red-600 text-white' : 'bg-white border-[#013E3F]/20 text-transparent'}`}>
-                                 {isOverdue && !isCompleted ? <AlertCircle className="w-3.5 h-3.5" /> : <CheckSquare className="w-3.5 h-3.5" />}
+                              <div className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition-colors ${isCompleted ? 'bg-green-600 border-green-600 text-white' : isTaskOverdue ? 'bg-red-600 border-red-600 text-white' : 'bg-white border-[#013E3F]/20 text-transparent'}`}>
+                                 {isTaskOverdue && !isCompleted ? <AlertCircle className="w-3.5 h-3.5" /> : <CheckSquare className="w-3.5 h-3.5" />}
                               </div>
                               <div className="flex-1">
                                  <div className="flex items-center gap-2 mb-1">
-                                    <h5 className={`font-bold text-sm ${isCompleted ? 'text-green-800 line-through decoration-green-800/30' : isOverdue ? 'text-red-700' : 'text-[#013E3F]'}`}>
+                                    <h5 className={`font-bold text-sm ${isCompleted ? 'text-green-800 line-through decoration-green-800/30' : isTaskOverdue ? 'text-red-700' : 'text-[#013E3F]'}`}>
                                       {tmpl?.title || task.template_id}
                                     </h5>
-                                    {isPreBoarding && !isCompleted && !isOverdue && <span className="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Pre-Boarding</span>}
-                                    {isOverdue && !isCompleted && <span className="text-[9px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold uppercase animate-pulse">Overdue</span>}
+                                    {isPreBoarding && !isCompleted && !isTaskOverdue && <span className="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Pre-Boarding</span>}
+                                    {isTaskOverdue && !isCompleted && <span className="text-[9px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold uppercase animate-pulse">Overdue</span>}
                                  </div>
-                                 {tmpl?.description && <p className={`text-xs ${isCompleted ? 'text-green-600' : isOverdue ? 'text-red-600/70' : 'text-[#013E3F]/60'}`}>{tmpl.description}</p>}
+                                 {tmpl?.description && <p className={`text-xs ${isCompleted ? 'text-green-600' : isTaskOverdue ? 'text-red-600/70' : 'text-[#013E3F]/60'}`}>{tmpl.description}</p>}
                                  <div className="flex gap-3 mt-3">
                                    {tmpl?.time_estimate && <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#013E3F]/40"><Timer className="w-3 h-3" /> {tmpl.time_estimate}</span>}
-                                   {dueDate && <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${isOverdue ? 'text-red-600' : 'text-[#013E3F]/40'}`}><Calendar className="w-3 h-3" /> Due {formatDate(task.due_date!)}</span>}
+                                   {dueDate && <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${isTaskOverdue ? 'text-red-600' : 'text-[#013E3F]/40'}`}><Calendar className="w-3 h-3" /> Due {formatDate(task.due_date!)}</span>}
                                    {!dueDate && <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#013E3F]/40"><Calendar className="w-3 h-3" /> {offset < 0 ? `${Math.abs(offset)} days before start` : offset === 0 ? 'Start day' : `Day ${offset}`}</span>}
                                  </div>
                               </div>
