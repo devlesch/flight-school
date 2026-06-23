@@ -433,8 +433,16 @@ export async function getCohortMembersForManager(
     const progressMap = new Map(userModules.map(um => [um.module_id, um]));
     const memberSource = sourceMap.get(profile.id) || 'cohort';
 
-    // Filter modules by audience based on member's source (null treated as cohort)
+    // Filter modules the SAME way the new-hire view does (NewHireDashboard), so
+    // a manager sees exactly what the hire sees — not every role's copy.
+    const memberStdRole = (profile as any).standardized_role as string | null;
     const filteredModules = allModules.filter((mod: any) => {
+      // Always show modules the member has interacted with (has a progress row).
+      if (progressMap.has(mod.id)) return true;
+      // Filter by target_role if set — a same-titled task exists per role.
+      const targetRole = mod.target_role as string | null;
+      if (targetRole && memberStdRole && targetRole !== memberStdRole) return false;
+      // Filter by audience based on member's source (null treated as cohort).
       const audience = (mod.audience as string | null) || 'cohort';
       if (memberSource === 'both') return true;
       return audience === memberSource;
