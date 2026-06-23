@@ -302,11 +302,17 @@ export async function getCohortMembersForManager(
       console.error('Error fetching all cohort leaders:', leadersError.message);
     }
 
+    // Drop co-leaders whose profile the RLS join couldn't return. The manager
+    // profiles policy (migration 023) only exposes self + subtree, so a peer
+    // co-leader outside this manager's subtree comes back with profiles = null.
+    // Keeping those would crash consumers that read leader.profile.id.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    leaders = (allLeaders || []).map((row: any) => ({
-      leader: { id: row.id, cohort_id: row.cohort_id, role_label: row.role_label, region: row.region, profile_id: row.profile_id, created_at: row.created_at } as CohortLeader,
-      profile: row.profiles as Profile,
-    }));
+    leaders = (allLeaders || [])
+      .filter((row: any) => row.profiles)
+      .map((row: any) => ({
+        leader: { id: row.id, cohort_id: row.cohort_id, role_label: row.role_label, region: row.region, profile_id: row.profile_id, created_at: row.created_at } as CohortLeader,
+        profile: row.profiles as Profile,
+      }));
 
     // 4. Get cohort members filtered by this manager's leader slot(s)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
